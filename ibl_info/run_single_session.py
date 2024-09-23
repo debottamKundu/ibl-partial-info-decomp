@@ -20,101 +20,33 @@ import seaborn as sns
 import pandas as pd
 import itertools
 import pickle as pkl
+from tqdm import tqdm
+from pathlib import Path
 
-from ibl_info.utility import computepid_time_intervals, aggregated_regions_time_intervals
+from ibl_info.broja_pid import compute_pid, coinformation
+from ibl_info.utility import discretize_neural_data, subsample
+from ibl_info.prepare_data_pid import gather_data_choice, gather_data_feedback, gather_data_stim, combine_probes
 
-def gather_data_stim(trials_df, spikes_probe0, spikes_probe1, time_window=[0,0.1]):
-    correct_trials =  trials_df[trials_df['feedbackType']==1]
 
-    left_stim_trials = correct_trials[correct_trials.contrastLeft>0]
-    right_stim_trials = correct_trials[correct_trials.contrastRight>0]
-    
-    stimon_times = np.concatenate([left_stim_trials.stimOn_times.values, right_stim_trials.stimOn_times.values])
-    decoding_variable = np.concatenate([np.ones((left_stim_trials.shape[0])),-1*np.ones((right_stim_trials.shape[0]))])
-    events_stim_tw = np.array([stimon_times + time_window[0], stimon_times + time_window[1]]).T
-
-    # Neurons x Trials
-    spike_count_stim_probe0, cluster_id_probe0 = get_spike_counts_in_bins(spikes_probe0["times"], spikes_probe0["clusters"], events_stim_tw)
-    spike_count_stim_probe1, cluster_id_probe1 = get_spike_counts_in_bins(spikes_probe1["times"], spikes_probe1["clusters"], events_stim_tw)
-
-    # for now, we don't use the single-cell peths
-
-    return spike_count_stim_probe0, spike_count_stim_probe1, cluster_id_probe0, cluster_id_probe1, decoding_variable
-
-def gather_data_choice(trials_df, spikes_probe0, spikes_probe1, time_window=[-0.2,0.0]):
-    
-
-    left_choice_trials = trials_df[trials_df.choice==1]
-    right_choice_trials = trials_df[trials_df.choice==-1]
-    
-    choice_times = np.concatenate([left_choice_trials.firstMovement_times.values, right_choice_trials.firstMovement_times.values])
-    decoding_variable = np.concatenate([np.ones((left_choice_trials.shape[0])),-1*np.ones((right_choice_trials.shape[0]))])
-    events_choice_tw = np.array([choice_times + time_window[0], choice_times + time_window[1]]).T
-
-    # Neurons x Trials
-    spike_count_stim_probe0, cluster_id_probe0 = get_spike_counts_in_bins(spikes_probe0["times"], spikes_probe0["clusters"], events_choice_tw)
-    spike_count_stim_probe1, cluster_id_probe1 = get_spike_counts_in_bins(spikes_probe1["times"], spikes_probe1["clusters"], events_choice_tw)
-
-    # for now, we don't use the single-cell peths
-
-    return spike_count_stim_probe0, spike_count_stim_probe1, cluster_id_probe0, cluster_id_probe1, decoding_variable
-
-def gather_data_feedback(trials_df, spikes_probe0, spikes_probe1, time_window=[0.0, 0.2]):
-    
-
-    correct_feedback_trials = trials_df[trials_df.feedbackType==1]
-    incorrect_feedback_trials = trials_df[trials_df.feedbackType==-1]
-    
-    feedback_times = np.concatenate([correct_feedback_trials.feedback_times.values, incorrect_feedback_trials.feedback_times.values])
-    decoding_variable = np.concatenate([np.ones((correct_feedback_trials.shape[0])),-1*np.ones((incorrect_feedback_trials.shape[0]))])
-    events_feedback_tw = np.array([feedback_times + time_window[0], feedback_times + time_window[1]]).T
-
-    # Neurons x Trials
-    spike_count_stim_probe0, cluster_id_probe0 = get_spike_counts_in_bins(spikes_probe0["times"], spikes_probe0["clusters"], events_feedback_tw)
-    spike_count_stim_probe1, cluster_id_probe1 = get_spike_counts_in_bins(spikes_probe1["times"], spikes_probe1["clusters"], events_feedback_tw)
-
-    # for now, we don't use the single-cell peths
-
-    return spike_count_stim_probe0, spike_count_stim_probe1, cluster_id_probe0, cluster_id_probe1, decoding_variable
-
-def gather_data_prior():
-    return NotImplementedError
-
-def plot_neurons(neural_data, regions):
+def plot_neurons(neural_data, regions, eid, condition, aggregate):
     """
     Average Heatmap for neurons locked to a condition
 
     Args:
         neural_data (np.array): Np array with neurons x trials
     """
-    
+    if aggregate==False:
+        agr = ''
+    else:
+        agr = 'agr'
 
     fig, ax = plt.subplots(figsize=(8,8))
     plt.rc('xtick', labelsize=8)    # fontsize of the tick labels
     sns.heatmap(neural_data, yticklabels=regions, cmap="Greys", cbar_kws={'shrink':0.5})
-    plt.show()
+    plt.savefig(f'D:/personal/phD/code/information-decomposition/ibl-partial-info-decomp/reports/figures/{eid}_{condition}_{agr}.png')
+    plt.close()
+    # plt.show()
 
-
-def cleanup_data(neural_data, regions):
-    """
-    Throw away rows with root, void and other undesirable regions
-
-    Args:
-        neural_data (np.array): neurons x trials
-        regions (np.array): acronym for neurons
-    """
-
-    # if region not in region_info.csv, throw away
-    nice_regions = pd.read_csv('../data/external/region_info.csv')['Beryl']
-    bad_indices = np.isin(regions, nice_regions)==False
-    print(f"Neurons thrown away: {regions[bad_indices]}")
-
-    #TODO: maybe throw away regions that don't have enough neurons
-
-    neural_data = neural_data[~bad_indices, :]
-    regions = regions[~bad_indices]
-
-    return np.asarray(neural_data, dtype=np.int32), regions
 
 def generate_sources(number_of_neurons, regions):
     """Generate a combination of all possible pairs
@@ -122,14 +54,33 @@ def generate_sources(number_of_neurons, regions):
     Args:
         number_of_neurons (int): Number of unique neurons in the dataset
         regions (np.array) : region ids
+    
+    Returns:
+        combination_regions (np.array) : All possible pairs of neurons
+        combination_neuronids (np.array) : Pairs of neurons wth ids specified
     """
-    combinations = []
+    combinations_regions = []
+    combinations_neuronids = []
     for x in itertools.combinations(range(number_of_neurons), 2):
-        combinations.append([regions[x[0]], regions[x[1]]])
-    combinations = np.asarray(combinations)
-    return combinations
+        combinations_regions.append([regions[x[0]], regions[x[1]]])
+        combinations_neuronids.append([x[0], x[1]])
+    combinations_regions = np.asarray(combinations_regions)
+    combinations_neuronids = np.asarray(combinations_neuronids)
+    return combinations_regions, combinations_neuronids
 
 def organise_pid_information(pid_data, neuron_pairs):
+    """
+    Combine PID information into unique, synergistic and redundant information for all neuron pairs
+
+    Args:
+        pid_data (np.array): PID decomposition for all possible pair of sources
+        neuron_pairs (np.array): Names of regions
+
+    Returns:
+       data_unique (dict): Unique information for each neuron
+       data_redundant (dict): Shared inforation between each neuron pair, ordered by region
+       data_synergy (dict): Synergistic inforation between each neuron pair, ordered by region
+    """
     # convert neuron pairs into unique combinations
     # key_array = set()
     # for regions in neuron_pairs:
@@ -183,68 +134,143 @@ def organise_pid_information(pid_data, neuron_pairs):
         
     return data_unique, data_synergy, data_redundancy
 
+def organize_coninfo(coinformation_data, neuron_pairs):
+    """
+    Combine coinformation and mutual information into usable data for neuron pairs
+
+    Args:
+        pid_data (np.array): PID decomposition for all possible pair of sources
+        neuron_pairs (np.array): Names of regions
+
+    Returns:
+       data_neuron (dict): Mutual information for each neuron
+       data_coninfo (dict): Coninformation between each neuron pair, ordered by region
+       data_trimI (dict): Mutual information between each neuron pair, ordered by region
+    """
+
+    data_neuron = dict()
+    data_coninfo = dict()
+    data_trimI = dict()
+
+    for idx in range(coinformation_data.shape[0]): # iterate over all sources
+        temp_key = np.sort(neuron_pairs[idx])
+        temp_key = temp_key[0]+'_'+temp_key[1]
+        key_0 = neuron_pairs[idx][0]
+        key_1 = neuron_pairs[idx][1]
+
+        if key_0 in data_neuron.keys():
+            t = data_neuron[key_0]
+            t.append(coinformation_data[idx,0])
+            data_neuron[key_0] = t
+            
+        else:
+            data_neuron[key_0] = [coinformation_data[idx,0]]
+        
+        # similarly
+        if key_1 in data_neuron.keys():
+            t = data_neuron[key_1]
+            t.append(coinformation_data[idx,1])
+            data_neuron[key_1] = t
+            
+        else:
+            data_neuron[key_1] = [coinformation_data[idx,1]]
+        
+        if temp_key in data_coninfo.keys():
+            t = data_coninfo[temp_key]
+            t.append(coinformation_data[idx,2])
+            data_coninfo[temp_key]= t 
+        else:
+            data_coninfo[temp_key] = [coinformation_data[idx,2]]
+        
+        if temp_key in data_trimI.keys():
+            t = data_trimI[temp_key]
+            t.append(coinformation_data[idx,3])
+            data_trimI[temp_key] = t
+            
+        else:
+            data_trimI[temp_key] = [coinformation_data[idx,3]]
+
+    return data_neuron, data_coninfo, data_trimI
+
+
 def run_pid_for_sources(decoding_variable, neural_data, regions):
+    """
+    Run partial information decomposition for all sources and a single target
+
+    Args:
+        decoding_variable (np.array): Target variable, choice, stim, feedback or prior
+        neural_data (np.array): neurons x trials
+        regions (np.array): names of regions for each neuron
+
+    Returns:
+       data_unique (dict): Unique information for each neuron
+       data_redundant (dict): Shared inforation between each neuron pair, ordered by region
+       data_synergy (dict): Synergistic inforation between each neuron pair, ordered by region
+    """
     # now what;
     # compute pid for everything
     targets = decoding_variable
-    sources = generate_sources(len(regions), regions)
+    neuron_pairs, sources = generate_sources(len(regions), regions)
     # in case i need to create a map
     # region_indices = {string: i for i, string in enumerate(set(regions))}
     # now run pid
     pid_information = np.zeros((len(sources), 4)) # neuronsC2 x sources
-    max_length_region_name = np.max(np.vectorize(len)(regions))
-    neuron_pairs = np.empty(len(sources),2, dtype=f'U{max_length_region_name}')
+    coinformation_data = np.zeros((len(sources), 4)) # neuronsC2 x sources
+    #max_length_region_name = np.max(np.vectorize(len)(regions))
+    #neuron_pairs = np.empty((len(sources),2), dtype=f'U{max_length_region_name}')
 
-    for idx in len(sources):
+    for idx in tqdm(range(len(sources)), desc="Running for all sources"):
         s1 = sources[idx][0]
         s2 = sources[idx][1]
-        X1 = neural_data[s1, :]
-        X2 = neural_data[s2, :]
-        Y = targets
-        u1, u2, red, syn = computepid_time_intervals(Y, X1, X2)
+        X1 = np.asarray(neural_data[s1, :], dtype=np.int32)
+        X2 = np.asarray(neural_data[s2, :], dtype=np.int32)
+        Y = np.asarray(targets, dtype=np.int32)
+        u1, u2, red, syn = compute_pid(Y, X1, X2)
+        coinfo, mi_yx1x2, mi_yx1, mi_yx2 = coinformation(Y, X1, X2)
         pid_information[idx, :] = u1, u2, red, syn
-        neuron_pairs[idx, 0] = regions[s1]
-        neuron_pairs[idx, 1] = regions[s2]
+        coinformation_data[idx,:] = mi_yx1, mi_yx2, coinfo, mi_yx1x2
+        # coninfo and mi_yx1x2 are for triplets, the other two are for single neurons
+        
+        # neuron_pairs[idx, 0] = regions[s1]
+        # neuron_pairs[idx, 1] = regions[s2]
     
     data_unique, data_synergy, data_redundancy = organise_pid_information(pid_information, neuron_pairs)
+    data_neuron, data_coninfo, data_trimI = organize_coninfo(coinformation_data, neuron_pairs)
 
-    return data_unique, data_synergy, data_redundancy
+    return data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI
 
-def combine_probes(spike_count_stim_probe0, spike_count_stim_probe1, regions_probe0, regions_probe1, aggregate=False):
+
+
+
+def write_to_disk(eid, data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI, condition, aggregate):
     
-    if aggregate:
-        # combine neurons from multiple regions into one big chunk
-        # spike_count_probe is neurons x trials
-        aggregate_neural_data = np.vstack([spike_count_stim_probe0, spike_count_stim_probe1])
-        aggregate_regions = np.concatenate([regions_probe0, regions_probe1])
-
-        # now run aggregation
-        aggregate_neural_data = aggregated_regions_time_intervals(aggregate_neural_data.T, aggregate_regions) # because the function expects trials x neurons
-        # now we clean up the data?
-        neural_data, regions = cleanup_data(aggregate_neural_data.T, aggregate_regions)
+    if aggregate==False:
+        agr = ''
     else:
-        neural_data_probe0, regions_probe0 = cleanup_data(spike_count_stim_probe0, regions_probe0)        
-        neural_data_probe1, regions_probe1 = cleanup_data(spike_count_stim_probe1, regions_probe1)
-                                                
-        # concatenate regions and neural data
-        neural_data = np.vstack([neural_data_probe0, neural_data_probe1])
-        regions = np.concatenate([regions_probe0, regions_probe1])
+        agr = 'agr'
 
-    plot_neurons(neural_data, regions)
-    return neural_data, regions
-
-def write_to_disk(eid, data_unique, data_synergy, data_redundancy, condition):
-    
-    with open(f'../data/processed/{eid}_data_unique_{condition}','wb') as f:
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_unique_{condition}{agr}','wb') as f:
         pkl.dump(data_unique, f)
     
-    with open(f'../data/processed/{eid}_data_synergy_{condition}','wb') as f:
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_synergy_{condition}{agr}','wb') as f:
         pkl.dump(data_synergy, f)
 
-    with open(f'../data/processed/{eid}_data_redundancy_{condition}','wb') as f:
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_redundancy_{condition}{agr}','wb') as f:
         pkl.dump(data_redundancy, f)
 
-def pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False):
+    # with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_mutual_information_{condition}{agr}','wb') as f:
+    #     pkl.dump(mutual_information, f)
+
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_neuron_{condition}{agr}','wb') as f:
+        pkl.dump(data_neuron, f)
+
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_coninfo_{condition}{agr}','wb') as f:
+        pkl.dump(data_coninfo, f)
+    
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_data_trimI_{condition}{agr}','wb') as f:
+        pkl.dump(data_trimI, f)
+
+def pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False, discretize=False, method='all'):
 
     (
         spike_count_stim_probe0, 
@@ -258,9 +284,125 @@ def pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0,
     regions_probe1 = clusters_probe1['Beryl'][cluster_id_probe1].to_numpy()
 
     # drop unwanted neurons
-    neural_data, regions = combine_probes(spike_count_stim_probe0, spike_count_stim_probe1, regions_probe0, regions_probe1)    
-    data_unique, data_synergy, data_redundancy = run_pid_for_sources(decoding_variable, neural_data, regions)
-    write_to_disk(eid, data_unique, data_synergy, data_redundancy, 'stim')
+    neural_data, regions = combine_probes(spike_count_stim_probe0, spike_count_stim_probe1, regions_probe0, regions_probe1, aggregate=aggregate, average=average)
+    if discretize:
+        neural_data = discretize_neural_data(neural_data, method=method)
+    plot_neurons(neural_data, regions, eid, 'stim', aggregate)
+    data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI = run_pid_for_sources(decoding_variable, neural_data, regions)
+    # mutual_information_data = run_mutual_information(decoding_variable, neural_data, regions)
+    write_to_disk(eid, data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI,  'stim', aggregate)
+
+def pid_choice_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False, discretize=False, method='all'):
+
+    (
+        spike_count_choice_probe0, 
+        spike_count_choice_probe1, 
+        cluster_id_probe0, 
+        cluster_id_probe1, 
+        decoding_variable
+    ) = gather_data_choice(trials_df, spikes_probe0, spikes_probe1)
+
+    regions_probe0 = clusters_probe0['Beryl'][cluster_id_probe0].to_numpy()
+    regions_probe1 = clusters_probe1['Beryl'][cluster_id_probe1].to_numpy()
+
+    # drop unwanted neurons
+    neural_data, regions = combine_probes(spike_count_choice_probe0, spike_count_choice_probe1, regions_probe0, regions_probe1, aggregate=aggregate, average=average)
+    if discretize:
+        neural_data = discretize_neural_data(neural_data, method=method)
+    plot_neurons(neural_data, regions, eid, 'choice', aggregate)
+    data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI = run_pid_for_sources(decoding_variable, neural_data, regions)
+    # mutual_information_data = run_mutual_information(decoding_variable, neural_data, regions)
+    write_to_disk(eid, data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI, 'choice', aggregate)
+
+
+def pid_feedback_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False, discretize=False, method='all'):
+
+    (
+        spike_count_feedback_probe0, 
+        spike_count_feedback_probe1, 
+        cluster_id_probe0, 
+        cluster_id_probe1, 
+        decoding_variable
+    ) = gather_data_feedback(trials_df, spikes_probe0, spikes_probe1)
+
+    regions_probe0 = clusters_probe0['Beryl'][cluster_id_probe0].to_numpy()
+    regions_probe1 = clusters_probe1['Beryl'][cluster_id_probe1].to_numpy()
+
+    # drop unwanted neurons
+    neural_data, regions = combine_probes(spike_count_feedback_probe0, spike_count_feedback_probe1, regions_probe0, regions_probe1, aggregate=aggregate, average=average)
+    if discretize:
+        neural_data = discretize_neural_data(neural_data, method=method)
+    plot_neurons(neural_data, regions, eid, 'feedback', aggregate)
+    data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI = run_pid_for_sources(decoding_variable, neural_data, regions)
+    # mutual_information_data = run_mutual_information(decoding_variable, neural_data, regions)
+    write_to_disk(eid, data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI, 'feedback', aggregate)
+
+def run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False,  discretize=False, method='all'):
+
+    # run subsampling only on choice data
+    (
+        spike_count_choice_probe0, 
+        spike_count_choice_probe1, 
+        cluster_id_probe0, 
+        cluster_id_probe1, 
+        decoding_variable
+    ) = gather_data_choice(trials_df, spikes_probe0, spikes_probe1)
+
+    regions_probe0 = clusters_probe0['Beryl'][cluster_id_probe0].to_numpy()
+    regions_probe1 = clusters_probe1['Beryl'][cluster_id_probe1].to_numpy()
+
+    # drop unwanted neurons
+    neural_data, regions = combine_probes(spike_count_choice_probe0, spike_count_choice_probe1, regions_probe0, regions_probe1, aggregate=aggregate, average=average)
+    if discretize:
+        neural_data = discretize_neural_data(neural_data, method=method)
+
+    # we subsample here essentially
+    means_triplets = []
+    means_unique = []
+    repeats = 10
+    for idx in range(repeats):
+        subsampled_data,subsampled_decoding = subsample(neural_data, decoding_variable)    
+        data_unique, data_synergy, data_redundancy, data_neuron, data_coninfo, data_trimI = run_pid_for_sources(subsampled_decoding, subsampled_data, regions)
+        # just keep means_triplets for all the repetations
+        if aggregate==False:
+            mean_for_keys = []
+            for k in data_synergy.keys():
+                mean_for_keys.append([np.mean(data_synergy[k]), np.mean(data_redundancy[k]), np.mean(data_coninfo[k]), np.mean(data_trimI[k])])
+            means_triplets.append(mean_for_keys)
+
+            means_for_unq = []
+            for k in data_unique.keys():
+                means_for_unq.append([np.mean(data_unique[k]), np.mean(data_neuron[k])])
+            means_unique.append(means_for_unq)
+        else:
+            means_triplets.append([list(data_synergy.values()), list(data_redundancy.values()), list(data_coninfo.values()), list(data_trimI.values())])
+            # means_unique.append([list(data_unique.values()), list(data_neuron.values())])
+            means_for_unq = []
+            for k in data_unique.keys():
+                means_for_unq.append([np.mean(data_unique[k]), np.mean(data_neuron[k])])
+            means_unique.append(means_for_unq)
+    
+    means_triplets = np.asarray(means_triplets)
+    means_unique = np.asarray(means_unique)
+    
+    # write to disk
+    if aggregate==False:
+        agr = ''
+    else:
+        agr = 'agr'
+    
+    if discretize==False:
+        dis = ''
+        method = ''
+    else:
+        dis = 'dis'
+
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_subsampled_trivariate_{agr}_{dis}_{method}.pkl','wb') as f:
+        pkl.dump(means_triplets, f)
+
+    with open(f'D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\{eid}_subsampled_biivariate_{agr}_{dis}_{method}.pkl','wb') as f:
+        pkl.dump(means_unique, f)
+    
 
 def run_single_eid(one, eid, regions_of_interest=None):
     """
@@ -294,11 +436,37 @@ def run_single_eid(one, eid, regions_of_interest=None):
     # subset trials based on trials_mask
     trials_df = trials_df[trials_mask]
 
+    #NOTE: Proper order of things is to discretize, maintain count, no averaging for single neurons
+    #NOTE: Same for aggregated regions, uniform discretization is good enough over each neuron
     # run partial information decompositions
-    pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1)
+    # pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False)
+    # pid_choice_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False)
+    # pid_feedback_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False)
 
+    # pid_stim_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=True)
+    # pid_choice_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=True)
+    # pid_feedback_data(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=True)
 
-
-
-
+    # run subsampling analysis for stability
+    # only for choice, both for regions, aggregate and discretize
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False,  discretize=False)
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=False,  discretize=False)
     
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False,  discretize=True, method='all')
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=False,  discretize=True, method='all')
+
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=False, average=False,  discretize=True, method='neuron')
+    # run_subsampling_analysis(eid, trials_df, spikes_probe0, spikes_probe1, clusters_probe0, clusters_probe1, aggregate=True, average=False,  discretize=True, method='neuron')
+    
+
+
+if __name__=='__main__':
+
+    eids_df = pd.read_csv('D:\personal\phD\code\information-decomposition\ibl-partial-info-decomp\data\processed\eids_to_analyse.csv')
+    one = ONE(base_url="https://openalyx.internationalbrainlab.org", password="international")
+    eids = eids_df.eid
+
+    # run eid 0 and 3 (I think)
+    run_single_eid(one, eids[0])
+    # for idx in range(0, len(eids)):
+    #     run_single_eid(one, eids[idx])
