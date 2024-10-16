@@ -11,6 +11,10 @@ import json
 from scipy.stats import gaussian_kde
 import imageio
 from load_network import contrasts
+from scipy.stats import linregress, pearsonr
+import matplotlib
+matplotlib.use('agg')
+
 contrasts = np.array(contrasts)
 
 def get_all_scalars_fast(reload_net, input, mask, infos):
@@ -68,6 +72,28 @@ def get_block_switch_differences(biased_blocks, count_up_to=10):
 
     return trial_list
 
+
+def return_exp_pmf():
+    # history of best 100
+    file = "mecha_sweep_indep_save_14135537.p"
+    ind = 4990
+    nll = 69.61903934487566
+
+    intermediates = pickle.load(open("./best_nets_params/" + file[:-2] + "_intermediate.p", 'rb'))
+    infos = pickle.load(open("./best_nets_params/" + file, 'rb'))
+    if 'params_list' in infos:
+        intermediates['params_list'] = infos['params_list']
+    infos['params_lstm'] = intermediates['params_list'][ind // (infos['all_scalars'].shape[0] // len(intermediates['params_list']))]
+    reload_net_standard = loaded_network(infos, use_best=False)
+
+    computed_nll = 100 * np.exp(np.log(reload_net_standard.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean())
+    print(nll, computed_nll)
+    assert np.allclose(nll, computed_nll)
+
+    exp_pmf = reload_net_standard.plot_pmf_energies(show=False)
+    return exp_pmf
+
+
 def return_standard_pmf():
     # PMF of best 111
     file = "mecha_sweep_save_6738724.p"
@@ -87,6 +113,46 @@ def return_standard_pmf():
 
     standard_pmf = reload_net_standard.plot_pmf_energies(show=False)
     return standard_pmf
+
+def return_exp_history():
+    # history of best 100
+    file = "mecha_sweep_indep_save_14135537.p"
+    ind = 4990
+    nll = 69.61903934487566
+
+    intermediates = pickle.load(open("./best_nets_params/" + file[:-2] + "_intermediate.p", 'rb'))
+    infos = pickle.load(open("./best_nets_params/" + file, 'rb'))
+    if 'params_list' in infos:
+        intermediates['params_list'] = infos['params_list']
+    infos['params_lstm'] = intermediates['params_list'][ind // (infos['all_scalars'].shape[0] // len(intermediates['params_list']))]
+    reload_net_standard = loaded_network(infos, use_best=False)
+
+    computed_nll = 100 * np.exp(np.log(reload_net_standard.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean())
+    print(nll, computed_nll)
+    assert np.allclose(nll, computed_nll)
+
+    results = reload_net_standard.lstm_fn.apply(reload_net_standard.params, None, input_seq[:, :, reload_net_standard.input_list])
+    return results[1] * infos['params_lstm']['mecha_history']['history_weighting']
+
+def return_exp_decay():
+    # decay of best 100
+    file = "mecha_sweep_indep_save_14135537.p"
+    ind = 4990
+    nll = 69.61903934487566
+
+    intermediates = pickle.load(open("./best_nets_params/" + file[:-2] + "_intermediate.p", 'rb'))
+    infos = pickle.load(open("./best_nets_params/" + file, 'rb'))
+    if 'params_list' in infos:
+        intermediates['params_list'] = infos['params_list']
+    infos['params_lstm'] = intermediates['params_list'][ind // (infos['all_scalars'].shape[0] // len(intermediates['params_list']))]
+    reload_net_standard = loaded_network(infos, use_best=False)
+
+    computed_nll = 100 * np.exp(np.log(reload_net_standard.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean())
+    print(nll, computed_nll)
+    assert np.allclose(nll, computed_nll)
+
+    return np.exp(-infos['params_lstm']['mecha_history']['decay'])
+
 
 def return_standard_history():
     # history of best 111
@@ -111,7 +177,7 @@ def return_standard_history():
 def plot_pmf_panels(long_array, cont_process, z, title=None, motivation_position=None, motivation_density=None):
     # given the array of scalars, a function to process the contrasts, and the density estimator z, plot the PMFs as they cover the distribution of scalars
     motivation_covering = np.quantile(long_array, [0.125, 0.4, 0.6, 0.875]) #, np.linspace(0.01, 0.99, 10))
-    standard_pmf = return_standard_pmf()
+    standard_pmf = return_exp_pmf()
 
     plt.figure(figsize=(16*0.85, 9*0.85))
     for j, mot in enumerate(motivation_covering):
@@ -163,7 +229,9 @@ def create_pmf_gif(cont_process, motivation_position, motivation_density, net_na
     files = []
     standard_pmf = return_standard_pmf()
     for i, augmenter in enumerate(motivation_position):
-        fig = plt.figure(figsize=(16*1.2, 9*1.2))
+        if i % 10 == 0:
+            print(i)
+        fig = plt.figure(figsize=(12, 9))
         augmented_contrast = np.hstack((contrasts, np.full((contrasts.shape[0], 1), augmenter)))
 
         pmf_energies = np.zeros(9)
@@ -171,25 +239,32 @@ def create_pmf_gif(cont_process, motivation_position, motivation_density, net_na
             activities = cont_process(c)
             pmf_energies[j] = activities[0] - activities[2]
         label = "Modified PMF"
-        plt.plot(pmf_energies, label=label, lw=2)
+        plt.plot(pmf_energies, label=label, lw=6)
         label = "Static PMF"
-        plt.plot(standard_pmf, 'k', alpha=0.2, label=label)
+        plt.plot(standard_pmf, 'k', alpha=0.3, lw=4, label=label)
 
         plt.axhline(0, c='k', alpha=0.1)
         plt.axvline(4, c='k', alpha=0.1)
         plt.ylim(-6.5, 6.5)
+        plt.xlim(0, 8)
         plt.xticks([0, 2, 4, 6, 8], [-1, -0.125, 0, 0.125, 1])
         sns.despine()
         plt.ylabel("Right - left logit", size=54)
         plt.xlabel("Contrast", size=54)
         plt.gca().tick_params(axis='both', which='major', labelsize=18)
+        plt.legend(frameon=False, fontsize=28, loc=4)
 
         plt.tight_layout()
 
         ax1 = plt.gca()
-        ax2 = fig.add_axes([0.1, 0.7, 0.25, 0.25])
+        ax2 = fig.add_axes([0.17, 0.7, 0.25, 0.25])
         ax2.plot(motivation_position, motivation_density, 'k')
         ax2.set_ylim(0)
+
+        ax2.set_ylabel("P", fontsize=22)
+        ax2.set_xlabel("PMF scalar", fontsize=22)
+        ax2.set_yticks([0, 1], [0, 1])
+
         ax2.axvline(augmenter, color='k', alpha=0.4)
         sns.despine()
 
@@ -206,12 +281,11 @@ def create_pmf_gif(cont_process, motivation_position, motivation_density, net_na
         images.append(imageio.imread(file + '.png'))
 
     print('saving')
-    imageio.mimsave("pmf_{}.gif".format(net_name), images, format='GIF', fps=30, loop=0)
+    imageio.mimsave("pmf_{}.gif".format(net_name), images, format='GIF', fps=24, loop=0)
 
 
 def scatter_scalars(long_array, color='b'):
     # scatter the two scalars against one another, plot a linear regression line through them and put the r^2 value in the title
-    from scipy.stats import linregress, pearsonr
     plt.figure(figsize=(14, 8))
 
     x, y = long_array[:, 0], long_array[:, 1]
@@ -293,12 +367,20 @@ def plot_start_and_history(input, augmenter, infos, marker='*', **kwargs):
         print(input)
         print(starting_point)
     else:
-        starting_point = reload_net.input_process(np.append(input, augmenter))
+        if infos['network_memory']:
+            starting_point = reload_net.input_process(np.append(input, augmenter))
+        else:
+            starting_point = input
     if infos['history_slots'] != 'infinite':
         trajectory = np.array(dynamics(starting_point, augmenter, infos))
         trajectory[:, 2] = trajectory[:, 2] - baseline * apply_baseline #!!! baseline cannot just be applied to starting-position, this will change how decay is done...
     starting_point = np.array(starting_point)
     starting_point[2] = starting_point[2] - baseline * apply_baseline #!!! baseline cannot just be applied to starting-position, this will change how decay is done...
+
+    # test
+    # starting_point = starting_point - trajectory[-1]
+    # trajectory -= trajectory[-1]
+
     if plot_side_diffs:
         plt.scatter(starting_point[2], starting_point[0], marker=marker, s=80, zorder=2, **kwargs)
         if infos['history_slots'] != 'infinite':
@@ -314,18 +396,31 @@ def plot_start_and_history(input, augmenter, infos, marker='*', **kwargs):
             return x
         return starting_point
 
+def auto_corr(choices, max_lag=40):
+    n = len(choices)
+    choices = np.array(choices)
+    choices = (choices + 1) / 2
+    mean_choice = np.mean(choices)
+    autocorr = np.correlate(choices - mean_choice, choices - mean_choice, mode='full')
+    autocorr = autocorr[n-1:] / (n * np.var(choices))
+
+    return autocorr[:max_lag]
+
 def create_history_gif(file):
     gif_stuff = []
+    decay_const = return_exp_decay()
     for i, augmenter in enumerate(history_motivation_position):
         print(i)
-        fig = plt.figure(figsize=(16, 9))
+        fig = plt.figure(figsize=(10.5, 9))
 
         if infos['pass_to_history_limit'] == 4:
             plot_start_and_history(np.array([0, 0, 1, 1]), augmenter, infos, c='b', label="Left choice, rewarded")
             plot_start_and_history(np.array([0, 0, 1, -1]), augmenter, infos, c='b', marker='d', label="Left choice, unrewarded")
             plot_start_and_history(np.array([1, 0, 0, 1]), augmenter, infos, c='r', label="Right choice, rewarded")
             plot_start_and_history(np.array([1, 0, 0, -1]), augmenter, infos, c='r', marker='d', label="Right choice, unrewarded")
-
+        elif infos['pass_to_history_limit'] == 3:
+            plot_start_and_history(np.array([0, 0, 1]), augmenter, infos, c='b', label="Left choice")
+            plot_start_and_history(np.array([1, 0, 0]), augmenter, infos, c='r', label="Right choice")
         else:
             plot_start_and_history(left_act_strong, augmenter, infos, c='b', label="Left choice, 100% contrast, rewarded")
             plot_start_and_history(right_act_strong, augmenter, infos, c='r', label="Right choice, 100% contrast, rewarded")
@@ -359,13 +454,23 @@ def create_history_gif(file):
         plt.gca().set_aspect('equal', adjustable='box')
         
         ax1 = plt.gca()
-        ax2 = fig.add_axes([0.1, 0.7, 0.25, 0.25])
+        ax2 = fig.add_axes([0.57, 0.18, 0.3, 0.3])
         ax2.plot(history_motivation_position, history_motivation_density, 'k')
+        ax2.set_ylabel("P", fontsize=22)
+        ax2.set_xlabel("Decay scalar", fontsize=22)
+        ax2.set_yticks([0, 1, 2], [0, 1, 2])
         ax2.set_ylim(0)
         ax2.axvline(augmenter, color='k', alpha=0.4)
 
-        ax1.set_xlim(-2.6, 2.6)
-        ax1.set_ylim(-2.6, 2.6)
+        ax1.set_xlim(-1.2, 1.3)
+        ax1.set_ylim(-1.2, 1.3)
+
+        ideal_const = np.exp(-0.36)
+        for j in range(11):
+            # ax1.plot([-1.2, 1.3], [-1.2 + decay_const ** (j+1), 1.3 + decay_const ** (j+1)], 'k', alpha=0.25 - j * 0.02)
+            # ax1.plot([-1.2, 1.3], [-1.2 - decay_const ** (j+1), 1.3 - decay_const ** (j+1)], 'k', alpha=0.25 - j * 0.02)
+            ax1.plot([-1.2, 1.3], [-1.2 + ideal_const ** (j+1), 1.3 + ideal_const ** (j+1)], 'g', alpha=0.25 - j * 0.02)
+            ax1.plot([-1.2, 1.3], [-1.2 - ideal_const ** (j+1), 1.3 - ideal_const ** (j+1)], 'g', alpha=0.25 - j * 0.02)
 
         ax1.plot([-1.6, 1.6], [-1.6, 1.6], 'k')
 
@@ -386,7 +491,7 @@ def create_history_gif(file):
         images.append(imageio.imread("./" + f))
 
     print('saving')
-    imageio.mimsave("encoding_{}.gif".format(file[:-2]), images, format='GIF', fps=30, loop=0)
+    imageio.mimsave("encoding_{}.gif".format(file[:-2]), images, format='GIF', fps=20, loop=0)
 
 # if this is the main file
 if __name__ == "__main__":
@@ -412,9 +517,25 @@ if __name__ == "__main__":
     # infos = pickle.load(open("./LSTM_2D_all/" + file, 'rb'))
     # reload_net = loaded_network(infos)
 
-    # file = 'mecha_plus_sweep_save_34254649.p'
+    # file = 'mecha_plus_sweep_save_48530959.p'
     # infos = pickle.load(open("./LSTM2D-all-reduced_input_4/" + file, 'rb'))
     # reload_net = loaded_network(infos)
+
+    # 111 best
+    # file = "mecha_sweep_save_6738724.p"
+    # ind = 19180
+    # nll = 70.8884806443464
+
+    # intermediates = pickle.load(open("./best_nets_params/" + file[:-2] + "_intermediate.p", 'rb'))
+    # infos = pickle.load(open("./best_nets_params/" + file, 'rb'))
+    # if 'params_list' in infos:
+    #     intermediates['params_list'] = infos['params_list']
+    # infos['params_lstm'] = intermediates['params_list'][ind // (infos['all_scalars'].shape[0] // len(intermediates['params_list']))]
+    # reload_net = loaded_network(infos, use_best=False)
+
+    file = 'mecha_plus_sweep_save_46757674.p'
+    infos = pickle.load(open("./to_sort/" + file, 'rb'))
+    reload_net = loaded_network(infos)
 
     # file = 'mecha_plus_sweep_save_25119790.p'
     # infos = pickle.load(open("./mecha_plus_sweep/" + file, 'rb'))
@@ -431,109 +552,270 @@ if __name__ == "__main__":
     # reload_net = loaded_network(infos)
 
     # full mirror net
-    file = 'mirror_mecha_plus_save_18756433.p'
-    infos = pickle.load(open("./222-2_mirror/" + file, 'rb'))
-    reload_net = loaded_network(infos)
+    # file = 'mirror_mecha_plus_save_18756433.p'
+    # infos = pickle.load(open("./222-2_mirror/" + file, 'rb'))
+    # reload_net = loaded_network(infos)
 
-    print(100 * np.exp(-infos['best_test_nll']), 100 * np.exp(np.log(reload_net.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean()))
-    assert np.allclose(100 * np.exp(-infos['best_test_nll']), 100 * np.exp(np.log(reload_net.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean()))
+    if file == "mecha_sweep_save_6738724.p":
+        computed_nll = 100 * np.exp(np.log(reload_net.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean())
+        print(nll, computed_nll)
+        assert np.allclose(nll, computed_nll)
+    else:
+        print(100 * np.exp(-infos['best_test_nll']), 100 * np.exp(np.log(reload_net.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean()))
+        assert np.allclose(100 * np.exp(-infos['best_test_nll']), 100 * np.exp(np.log(reload_net.return_predictions(test_input_seq, action_subsetting=True)[test_test_mask]).mean()))
+
+    augmenter = 0
+
+    # Function to calculate distance from identity line y = x
+    def distance_from_identity_line(vec):
+        # |x - y| / sqrt(2) is the perpendicular distance to the line y=x
+        return np.abs(vec[0] - vec[1]) / np.sqrt(2)
+
+
+    # Create a grid of points in 2D space
+    # x_vals = np.linspace(-1.6, 3.6, 70)
+    # y_vals = np.linspace(-1.6, 3.6, 70)
+    # X, Y = np.meshgrid(x_vals, y_vals)
+    # points = np.vstack([X.ravel(), Y.ravel()]).T
+    # gif_stuff = []
+
+    # contrast_motivation_position = np.load("lstm_contrast_scalar_positions_{}.npy".format(file[:-2]))
+    # contrast_motivation_density = np.load("lstm_contrast_scalar_density_{}.npy".format(file[:-2]))
+    # history_motivation_position = np.load("lstm_history_scalar_positions_{}.npy".format(file[:-2]))
+    # history_motivation_density = np.load("lstm_history_scalar_density_{}.npy".format(file[:-2]))
+
+    # for i, mot in enumerate(history_motivation_position):
+    #     print(i)
+    #     # Apply the function f to each point
+    #     transformed_points = np.array([reload_net.mult_apply_augmented([p[0], -1.29, p[1]], mot, 1) for p in points])
+
+    #     # Calculate the distance from the identity line before and after applying f
+    #     distances_before = np.array([distance_from_identity_line(p) for p in points])
+    #     distances_after = np.array([distance_from_identity_line(p) for p in transformed_points])
+
+    #     # Calculate the change in distance (negative means moving towards the identity line)
+    #     distance_change = distances_before - distances_after
+
+    #     # Reshape the distance change to match the grid
+    #     distance_change_grid = distance_change.reshape(X.shape)
+
+    #     # arrow_step = 10  # Take every 10th point to reduce density
+    #     # X_arrows = X[::arrow_step, ::arrow_step]
+    #     # Y_arrows = Y[::arrow_step, ::arrow_step]
+
+    #     # # Get the original points and transformed points at lower density
+    #     # points_arrows = np.vstack([X_arrows.ravel(), Y_arrows.ravel()]).T
+    #     # transformed_arrows = np.array([reload_net.mult_apply_augmented([p[0], -1.29, p[1]], mot, 1) for p in points_arrows])
+
+    #     # # Calculate the change in position for each arrow
+    #     # U = transformed_arrows[:, 0] - points_arrows[:, 0]  # Change in x-direction
+    #     # V = transformed_arrows[:, 1] - points_arrows[:, 1]  # Change in y-direction
+
+    #     # # Reshape U and V to match the grid for plotting arrows
+    #     # U_grid = U.reshape(X_arrows.shape)
+    #     # V_grid = V.reshape(Y_arrows.shape)
+
+    #     # Plotting
+    #     plt.figure(figsize=(8, 6))
+    #     plt.contourf(X, Y, distance_change_grid, cmap='coolwarm', levels=50)
+    #     # plt.colorbar(label="Distance Change Towards Identity Line")
+    #     # plt.quiver(X_arrows, Y_arrows, U_grid, V_grid, angles='xy', scale_units='xy', scale=1.5, color='black')
+
+    #     # plt.title("2D Plane Colored by Movement Towards Identity Line")
+    #     plt.xlabel("x")
+    #     plt.ylabel("y")
+    #     plt.grid(True)
+
+    #     plt.plot([-1.6, 3.6], [-1.6, 3.6], 'k')
+    #     plt.xlim(-1.6, 3.6)
+    #     plt.ylim(-1.6, 3.6)
+    #     plt.savefig("gif_images/" + str(file[:-2]).replace('.', '_') + "_colour_sample_{}".format(i).replace('.', '_'))
+
+    #     plt.close()
+
+    #     gif_stuff.append("gif_images/" + str(file[:-2]).replace('.', '_') + "_colour_sample_{}".format(i).replace('.', '_') + '.png')
+
+    # print('gif')
+    # images = []
+
+    # for f in gif_stuff:
+    #     images.append(imageio.imread("./" + f))
+    # for f in gif_stuff[::-1]:
+    #     images.append(imageio.imread("./" + f))
+
+    # imageio.mimsave("decay_{}.gif".format(file[:-2]), images, format='GIF', fps=30, loop=0)
+    # quit()
 
     # temp ###
-    all_scalar = []
-    all_history_comps = []
+    if False:
+        all_scalar = []
+        all_history_comps = []
+        l_comps = []
+        r_comps = []
+        neutral_comps = []
 
-    results = reload_net.lstm_fn.apply(reload_net.params, None, input_seq[:, :, reload_net.input_list])
-    hidden_states = results[1][1][0]  # extract the exact hidden states of the LSTM
-    history_safe = results[1][0]
-
-    if infos['agent_class'] == "<class '__main__.Mirror_mecha_plus'>":
-        mot_matrix, mot_bias = infos['params_lstm']['mirror_mecha_plus/~_state_lstm/linear_8']['w'], infos['params_lstm']['mirror_mecha_plus/~_state_lstm/linear_8']['b']
-    else:
-        mot_matrix, mot_bias = infos['params_lstm']['mecha_history_plust_lstm/~_state_lstm/linear_8']['w'], infos['params_lstm']['mecha_history_plust_lstm/~_state_lstm/linear_8']['b']
-    if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
-        mot_matrix = mot_matrix[:, 0]  # need to get rid of the flat last dimension for this
-
-    standard_hist = return_standard_history()
-
-    contrast_motzis = []
-    history_motzis = []
-
-    for sess in range(15, min(55, len(train_eids))):
-
-        plt.figure(figsize=(12, 7))
-        if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
-            motivations = (hidden_states[sess, :train_mask[sess].sum()+1] * mot_matrix).sum(1) + mot_bias
+        results = reload_net.lstm_fn.apply(reload_net.params, None, input_seq[:, :, reload_net.input_list])
+        hidden_states = results[1][1][0]  # extract the exact hidden states of the LSTM
+        if infos['agent_class'] != "<class '__main__.Mecha_history'>":
+            history_safe = results[1][0]
         else:
-            motivations = (hidden_states[sess, :train_mask[sess].sum()+1] @ mot_matrix) + mot_bias  # this might work in both cases? at least if don't cut out the last flat dimension a couple lines earlier?
-        # TODO: check that this works in fact
+            history_safe = results[1]
 
-        all_scalar.append(motivations)
+        if infos['agent_class'] == "<class '__main__.Mirror_mecha_plus'>":
+            mot_matrix, mot_bias = infos['params_lstm']['mirror_mecha_plus/~_state_lstm/linear_8']['w'], infos['params_lstm']['mirror_mecha_plus/~_state_lstm/linear_8']['b']
+        elif infos['agent_class'] == "<class '__main__.Mecha_history_plust_lstm'>":
+            mot_matrix, mot_bias = infos['params_lstm']['mecha_history_plust_lstm/~_state_lstm/linear_8']['w'], infos['params_lstm']['mecha_history_plust_lstm/~_state_lstm/linear_8']['b']
+        if ('lstm_dim' not in infos or infos['lstm_dim'] == 1) and infos['agent_class'] != "<class '__main__.Mecha_history'>":
+            mot_matrix = mot_matrix[:, 0]  # need to get rid of the flat last dimension for this
 
-        if infos['history_slots'] == 'infinite':
-            the_stuff = history_safe[sess, :train_mask[sess].sum()+1, :]
-        else:
-            the_stuff = history_safe[sess, :train_mask[sess].sum()+1, :].sum(1)
-        all_history_comps.append(the_stuff[:, 2] - the_stuff[:, 0])
+        standard_hist = return_standard_history()
+        standard_hist = return_exp_history()
 
-        if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
-            plt.plot(all_scalar[-1], label="Motivation", c='k')
-        else:
-            plt.plot(all_scalar[-1][:, 0], label="Contrast mot.")
-            plt.plot(all_scalar[-1][:, 1], label="History mot.")
-            contrast_motzis.append(all_scalar[-1][:, 0])
-            history_motzis.append(all_scalar[-1][:, 1])
+        contrast_motzis = []
+        history_motzis = []
 
-        plt.plot(input_seq[sess, :train_mask[sess].sum()+1, 0] - input_seq[sess, :train_mask[sess].sum()+1, 2] + 1, 'ko', label="Action", alpha=0.5)
+        stan_hists = []
+        local_hists = []
+        choices = []
 
-        diff = standard_hist[sess, :train_mask[sess].sum()+1, 2] - standard_hist[sess, :train_mask[sess].sum()+1, 0]
+        for sess in range(len(train_eids)):
 
-        # reward rate plotting
-        avg_rewards = []
-        for i in range(train_mask[sess].sum()):
-            avg_rewards.append(np.mean(np.clip(input_seq[sess, max(1, i-15):i+1, 5], 0, 1)))
-        # plt.plot(avg_rewards, 'k', ls='--', label="Windowed reward rate", alpha=0.5)
+            print(sess)
 
-        # block plotting
-        previous = 0.5
-        start = 0
-        for i in range(len(biased_blocks[sess])):
-            if biased_blocks[sess][i] == 0.2 and previous != 0.2:
-                if previous == 0.5:
-                    start = i
-                    previous = 0.2
-                else:
-                    plt.axvspan(start, i, color='r', alpha=0.2)
-                    start = i
-                    previous = 0.2
-            elif biased_blocks[sess][i] == 0.8 and previous != 0.8:
-                if previous == 0.5:
-                    start = i
-                    previous = 0.8
-                else:
-                    plt.axvspan(start, i, color='b', alpha=0.2)
-                    start = i
-                    previous = 0.8
-            if biased_blocks[sess][i] == 0.:
-                if previous == 0.2:
-                    plt.axvspan(start, i, color='b', alpha=0.2)
-                elif previous == 0.8:
-                    plt.axvspan(start, i, color='r', alpha=0.2)
+            if sess == 100:
                 break
 
-        # plt.plot(diff - np.mean(diff), label="Standard hist.")
-        # plt.plot(all_history_comps[-1] - np.mean(all_history_comps[-1]), label="History")
-        plt.xlabel("Trial (example session)", fontsize=34)
-        plt.ylabel("Scalar / reward rate", fontsize=34)
-        plt.gca().tick_params(axis='both', which='major', labelsize=24)
-        plt.ylim(-3, 2.2)
-        plt.xlim(0, train_mask[sess].sum())
+            if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
+                motivations = (hidden_states[sess, :train_mask[sess].sum()+1] * mot_matrix).sum(1) + mot_bias
+            else:
+                motivations = (hidden_states[sess, :train_mask[sess].sum()+1] @ mot_matrix) + mot_bias  # this might work in both cases? at least if don't cut out the last flat dimension a couple lines earlier?
+            # TODO: check that this works in fact
+
+            all_scalar.append(motivations)
+
+            if infos['history_slots'] == 'infinite':
+                the_stuff = history_safe[sess, :train_mask[sess].sum()+1, :]
+            else:
+                the_stuff = history_safe[sess, :train_mask[sess].sum()+1, :].sum(1)
+
+            if not infos['network_memory']:
+                the_stuff = the_stuff * infos['params_lstm']['mecha_history_plust_lstm']['history_weighting']
+
+            all_history_comps.append(the_stuff[:, 2] - the_stuff[:, 0])
+            neutral_comps.append(the_stuff[:, 1])
+            l_comps.append(the_stuff[:, 0])
+            r_comps.append(the_stuff[:, 2])
+
+            plt.figure(figsize=(12, 7))
+            if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
+                plt.plot(all_scalar[-1], label="Motivation", c='k')
+            else:
+                plt.plot(all_scalar[-1][:, 0], label="Contrast scalar")
+                plt.plot(all_scalar[-1][:, 1], label="History scalar.")
+                contrast_motzis.append(all_scalar[-1][:, 0])
+                history_motzis.append(all_scalar[-1][:, 1])
+
+            plt.plot((input_seq[sess, :train_mask[sess].sum()+1, 0] - input_seq[sess, :train_mask[sess].sum()+1, 2]) * -1, 'ko', label="Action", alpha=0.5)
+            choices.append(input_seq[sess, :train_mask[sess].sum()+1, 0] - input_seq[sess, :train_mask[sess].sum()+1, 2])
+
+            diff = standard_hist[sess, :train_mask[sess].sum()+1, 2] - standard_hist[sess, :train_mask[sess].sum()+1, 0]
+
+            # reward rate plotting
+            avg_rewards = []
+            for i in range(train_mask[sess].sum()):
+                avg_rewards.append(np.mean(np.clip(input_seq[sess, max(1, i-15):i+1, 5], 0, 1)))
+            # plt.plot(avg_rewards, 'k', ls='--', label="Windowed reward rate", alpha=0.5)
+
+            # block plotting
+            previous = 0.5
+            start = 0
+            for i in range(len(biased_blocks[sess])):
+                if biased_blocks[sess][i] == 0.2 and previous != 0.2:
+                    if previous == 0.5:
+                        start = i
+                        previous = 0.2
+                    else:
+                        plt.axvspan(start, i, color='r', alpha=0.2)
+                        start = i
+                        previous = 0.2
+                elif biased_blocks[sess][i] == 0.8 and previous != 0.8:
+                    if previous == 0.5:
+                        start = i
+                        previous = 0.8
+                    else:
+                        plt.axvspan(start, i, color='b', alpha=0.2)
+                        start = i
+                        previous = 0.8
+                if biased_blocks[sess][i] == 0.:
+                    if previous == 0.2:
+                        plt.axvspan(start, i, color='b', alpha=0.2)
+                    elif previous == 0.8:
+                        plt.axvspan(start, i, color='r', alpha=0.2)
+                    break
+
+            # plt.plot(diff - np.mean(diff), label="Standard hist.")
+            # plt.plot(all_history_comps[-1] - np.mean(all_history_comps[-1]), label="History")
+            stan_hists.append(diff)
+            local_hists.append(all_history_comps[-1])
+            plt.xlabel("Trial (example session)", fontsize=34)
+            plt.ylabel("Scalar / choice", fontsize=34)
+            plt.gca().tick_params(axis='both', which='major', labelsize=24)
+            plt.ylim(-3, 2.2)
+            plt.xlim(0, train_mask[sess].sum())
+            sns.despine()
+            plt.legend(frameon=False, fontsize=28)
+            plt.tight_layout()
+            print(sess)
+            plt.savefig("tempi_{}".format(sess)) # , dpi=300)
+            if sess < 5:
+                plt.close()
+            else:
+                plt.close()
+
+        second_third_auto_corr = [auto_corr(x[int(len(x) * 3/8) : int(len(x) * 5/8)]) for x in choices]
+        last_third_auto_corr = [auto_corr(x[int(len(x) * 7/8) : len(x)]) for x in choices]
+
+        plt.plot(np.array(second_third_auto_corr).mean(0), label="Central session eights")
+        plt.plot(np.array(last_third_auto_corr).mean(0), label="Last session eigth")
+        plt.legend(frameon=False, fontsize=22)
+        plt.ylabel("Autocorrelation", fontsize=24)
+        plt.xlabel("Lag", fontsize=24)
+
+        plt.xlim(0, 40)
         sns.despine()
-        plt.legend(frameon=False, fontsize=28)
         plt.tight_layout()
-        plt.savefig("tempi_{}".format(sess)) # , dpi=300)
+        plt.savefig("temp")
+        plt.close()
+                
+        quit()
+        a = np.concatenate(stan_hists)
+        a -= a.mean()
+        b = np.concatenate(local_hists)
+        b -= b.mean()
+
+        if infos['agent_class'] != "<class '__main__.Mecha_history'>":
+            c = np.concatenate(history_motzis)
+            d = np.concatenate(contrast_motzis)
+
+            plt.scatter(a, b, alpha=0.1, c=c)
+        else:
+            plt.scatter(a, b, alpha=0.1)
+
+        slope, intercept, r_value, p_value, std_err = linregress(a, b)
+        plt.plot([a.min(), a.max()], [slope * a.min() + intercept, slope * a.max() + intercept], 'r', label='fitted line')
+
+
+        plt.plot([-2, 2], [-2, 2], 'k')
         plt.show()
-    # quit()
-    # end temp ###
+        quit()
+
+        neutral_comps, r_comps, l_comps = np.concatenate(neutral_comps), np.concatenate(r_comps), np.concatenate(l_comps)
+        plt.hist(neutral_comps, alpha=.3, label='neutral')
+        plt.hist(l_comps, alpha=.3, label='left')
+        plt.hist(r_comps, alpha=.3, label='right')
+        plt.legend()
+        plt.close()
+        # end temp ###
 
     fake_obs = np.zeros((1, 46, 9))
     fake_obs[0, 1:16, 0] = 1
@@ -686,29 +968,29 @@ if __name__ == "__main__":
     # compute the average reward rate of each session, and plot it against the mean scalar
 
 
-    if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
-        xy_contrast = long_array
-        z_contrast = gaussian_kde(xy_contrast)
-        xy_history = xy_contrast
-        z_history = z_contrast
-    else:
-        xy_contrast = long_array[:, 0]
-        z_contrast = gaussian_kde(xy_contrast)
-        xy_history = long_array[:, 1]
-        z_history = gaussian_kde(xy_history)
+    # if 'lstm_dim' not in infos or infos['lstm_dim'] == 1:
+    #     xy_contrast = long_array
+    #     z_contrast = gaussian_kde(xy_contrast)
+    #     xy_history = xy_contrast
+    #     z_history = z_contrast
+    # else:
+    #     xy_contrast = long_array[:, 0]
+    #     z_contrast = gaussian_kde(xy_contrast)
+    #     xy_history = long_array[:, 1]
+    #     z_history = gaussian_kde(xy_history)
 
 
-    contrast_motivation_position = np.linspace(xy_contrast.min(), xy_contrast.max(), num=200)
-    contrast_motivation_density = z_contrast(np.linspace(xy_contrast.min(), xy_contrast.max(), num=200))
+    # contrast_motivation_position = np.linspace(xy_contrast.min(), xy_contrast.max(), num=100)
+    # contrast_motivation_density = z_contrast(np.linspace(xy_contrast.min(), xy_contrast.max(), num=100))
 
-    history_motivation_position = np.linspace(xy_history.min(), xy_history.max(), num=200)
-    history_motivation_density = z_history(np.linspace(xy_history.min(), xy_history.max(), num=200))
+    # history_motivation_position = np.linspace(xy_history.min(), xy_history.max(), num=100)
+    # history_motivation_density = z_history(np.linspace(xy_history.min(), xy_history.max(), num=100))
 
-    np.save("long_array_{}".format(file[:-2]), long_array)
-    np.save("lstm_contrast_scalar_positions_{}".format(file[:-2]), contrast_motivation_position)
-    np.save("lstm_contrast_scalar_density_{}".format(file[:-2]), contrast_motivation_density)
-    np.save("lstm_history_scalar_positions_{}".format(file[:-2]), history_motivation_position)
-    np.save("lstm_history_scalar_density_{}".format(file[:-2]), history_motivation_density)
+    # np.save("long_array_{}".format(file[:-2]), long_array)
+    # np.save("lstm_contrast_scalar_positions_{}".format(file[:-2]), contrast_motivation_position)
+    # np.save("lstm_contrast_scalar_density_{}".format(file[:-2]), contrast_motivation_density)
+    # np.save("lstm_history_scalar_positions_{}".format(file[:-2]), history_motivation_position)
+    # np.save("lstm_history_scalar_density_{}".format(file[:-2]), history_motivation_density)
 
 
     contrast_motivation_position = np.load("lstm_contrast_scalar_positions_{}.npy".format(file[:-2]))
@@ -757,8 +1039,8 @@ if __name__ == "__main__":
         new = np.tanh(temp)
         return (new[:, None] * contrast_matrix_2).sum(0) + contrast_bias_2
 
-    if True:
-        plot_pmf_panels(long_array[:, 0] if long_array.shape[1] == 2 else long_array, cont_process, z=None, title=file[:-2], motivation_position=contrast_motivation_position, motivation_density=contrast_motivation_density)
+    if False:
+        #plot_pmf_panels(long_array[:, 0] if long_array.shape[1] == 2 else long_array, cont_process, z=None, title=file[:-2], motivation_position=contrast_motivation_position, motivation_density=contrast_motivation_density)
         create_pmf_gif(cont_process, contrast_motivation_position, contrast_motivation_density, file[:-2])
 
     create_history_gif(file)

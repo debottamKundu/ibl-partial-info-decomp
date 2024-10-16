@@ -1,41 +1,45 @@
 import matplotlib.pyplot as plt
 import os
 import pickle
-import load_data
+from ibl_info.lstm_model import load_data
 import numpy as np
 import jax.numpy as jnp
 import haiku as hk
-from mecha_history_plus_lstm import Mecha_history, default_params as mecha_params
-from mouse_rnn import LstmAgent
-from mecha_history_plus_lstm import Mecha_history_plust_lstm
-from rMLPs import RNN
-from bi_rnn import BiRNN
 import pickle
-from infer_decay import Infer_decay
-from mirrored_mecha_plus import Mirror_mecha_plus
-# from mecha_history_plus_lstm import Mecha_history_plust_lstm
+from ibl_info.lstm_model.mecha_history_plus_lstm import Mecha_history_plust_lstm
 
+
+# Unused imports
+# from mouse_rnn import LstmAgent
+# from rMLPs import RNN
+# from bi_rnn import BiRNN
+# from infer_decay import Infer_decay
+# from mirrored_mecha_plus import Mirror_mecha_plus
 
 np.set_printoptions(suppress=True)
 
 n_choices = load_data.n_choices
 
-from run_rnn_functions import network_type_to_params
+from ibl_info.lstm_model.run_rnn_functions import network_type_to_params
 
-network_type2class = {"<class '__main__.Mecha_history'>": Mecha_history,
-                      "<class 'mecha_history.Mecha_history'>": Mecha_history,
-                      "<class '__main__.Mecha_history_plust_lstm'>": Mecha_history_plust_lstm,
+network_type2class = {"<class '__main__.Mecha_history_plust_lstm'>": Mecha_history_plust_lstm,
                       "<class 'mecha_history_plus_lstm.Mecha_history_plust_lstm'>":  Mecha_history_plust_lstm,
-                      "<class '__main__.RNN'>": RNN,
-                      "<class 'rMLPs.RNN'>": RNN,
-                      "<class '__main__.BiRNN'>": BiRNN,
-                      "<class 'bi_rnn.BiRNN'>": BiRNN,
-                      "<class '__main__.LstmAgent'>": LstmAgent,
-                      "<class 'mouse_rnn.LstmAgent'>": LstmAgent,
-                      "<class '__main__.Infer_decay'>": Infer_decay,
-                      "<class 'infer_decay.Infer_decay'>": Infer_decay,
-                      "<class '__main__.Mirror_mecha_plus'>": Mirror_mecha_plus,
-                      "<class 'mirrored_mecha_plus.Mirror_mecha_plus'>": Mirror_mecha_plus}
+                     }
+    
+# "<class '__main__.Mecha_history'>": Mecha_history,
+# "<class 'mecha_history.Mecha_history'>": Mecha_history,
+
+# "<class '__main__.RNN'>": RNN,
+# "<class 'rMLPs.RNN'>": RNN,
+# "<class '__main__.BiRNN'>": BiRNN,
+# "<class 'bi_rnn.BiRNN'>": BiRNN,
+# "<class '__main__.LstmAgent'>": LstmAgent,
+# "<class 'mouse_rnn.LstmAgent'>": LstmAgent,
+# "<class '__main__.Infer_decay'>": Infer_decay,
+# "<class 'infer_decay.Infer_decay'>": Infer_decay,
+# "<class '__main__.Mirror_mecha_plus'>": Mirror_mecha_plus,
+# "<class 'mirrored_mecha_plus.Mirror_mecha_plus'>": Mirror_mecha_plus}
+
 
 contrasts = [np.array([1, 0]),
              np.array([0.25, 0]),
@@ -59,28 +63,13 @@ class loaded_network:
         self.agent_class = network_type2class[infos["agent_class"]]
         self.params = infos['params_lstm'] if not use_best else infos['best_net']  # TODO: this would be good to use, but a lot of the old code is not set up for it
         # select the necessary kewords out of the infos dict, for the chosen agent_class
-        if 'fit_converge_goal' not in infos and self.agent_class == Mecha_history:
-            infos['fit_converge_goal'] = False
+        # if 'fit_converge_goal' not in infos and self.agent_class == Mecha_history:
+        #     infos['fit_converge_goal'] = False
         self.model_keywords = {key: infos[key] for key in network_type_to_params[infos['agent_class']] if key in infos}
         self.input_list = infos['input_list']
         self.infos = infos
 
         # get some matrices; TODO: this is dumb: we can just get the class name and search the dict
-        if self.agent_class == Mecha_history:
-            if 'network_memory' in infos and infos['network_memory']:
-                self.input_matrix_1, self.input_bias_1 = self.params['mecha_history/~_habit_manipulator/linear']['w'], self.params['mecha_history/~_habit_manipulator/linear']['b']
-                self.input_matrix_2, self.input_bias_2 = self.params['mecha_history/~_habit_manipulator/linear_1']['w'], self.params['mecha_history/~_habit_manipulator/linear_1']['b']
-            if 'network_decay' in infos and infos['network_decay']:
-                self.decay_matrix_1, self.decay_bias_1 = self.params['mecha_history/~/decay_1']['w'], self.params['mecha_history/~/decay_1']['b']
-                self.decay_matrix_2, self.decay_bias_2 = self.params['mecha_history/~/decay_2']['w'], self.params['mecha_history/~/decay_2']['b']
-            self.contrast_matrix_1, self.contrast_bias_1 = self.params['mecha_history/~_contrast_mlp/linear']['w'], self.params['mecha_history/~_contrast_mlp/linear']['b']
-            self.contrast_matrix_2, self.contrast_bias_2 = self.params['mecha_history/~_contrast_mlp/linear_1']['w'], self.params['mecha_history/~_contrast_mlp/linear_1']['b']
-        if self.agent_class == Infer_decay:
-            self.contrast_matrix_1, self.contrast_bias_1 = self.params['infer_decay/~_contrast_mlp/linear']['w'], self.params['infer_decay/~_contrast_mlp/linear']['b']
-            self.contrast_matrix_2, self.contrast_bias_2 = self.params['infer_decay/~_contrast_mlp/linear_1']['w'], self.params['infer_decay/~_contrast_mlp/linear_1']['b']
-        if self.agent_class == BiRNN:
-            self.contrast_matrix_1, self.contrast_bias_1 = self.params['bi_rnn/~_contrast_mlp/linear']['w'], self.params['bi_rnn/~_contrast_mlp/linear']['b']
-            self.contrast_matrix_2, self.contrast_bias_2 = self.params['bi_rnn/~_contrast_mlp/linear_1']['w'], self.params['bi_rnn/~_contrast_mlp/linear_1']['b']
         if self.agent_class == Mecha_history_plust_lstm:
             if self.infos['network_memory']:
                 self.input_matrix_1, self.input_bias_1 = self.params['mecha_history_plust_lstm/~_habit_manipulator/linear']['w'], self.params['mecha_history_plust_lstm/~_habit_manipulator/linear']['b']
@@ -163,16 +152,16 @@ class loaded_network:
     # encoding of the last history input
     def input_process(self, input, addon=None):
         if self.infos['network_memory']:
-            if self.infos['Mirror_nets']:
-                from my_module import mirror_invariant_network
-                network = hk.without_apply_rng(hk.transform(mirror_invariant_network()))
-                return network.apply({'mirror_invariant_network/~/linear': self.params['mirror_mecha_plus/~_habit_manipulator/mirror_invariant_network/~/linear'],
-                                      'mirror_invariant_network/~/linear_1': self.params['mirror_mecha_plus/~_habit_manipulator/mirror_invariant_network/~/linear_1']
-                                      }, input, addon=addon)
-            else:
-                temp = (input[:, None] * self.input_matrix_2).sum(0) + self.input_bias_2
-                new = np.tanh(temp)
-                return (new[:, None] * self.input_matrix_1).sum(0) + self.input_bias_1
+            # if self.infos['Mirror_nets']:
+            #     from my_module import mirror_invariant_network
+            #     network = hk.without_apply_rng(hk.transform(mirror_invariant_network()))
+            #     return network.apply({'mirror_invariant_network/~/linear': self.params['mirror_mecha_plus/~_habit_manipulator/mirror_invariant_network/~/linear'],
+            #                           'mirror_invariant_network/~/linear_1': self.params['mirror_mecha_plus/~_habit_manipulator/mirror_invariant_network/~/linear_1']
+            #                           }, input, addon=addon)
+            # else:
+            temp = (input[:, None] * self.input_matrix_2).sum(0) + self.input_bias_2
+            new = np.tanh(temp)
+            return (new[:, None] * self.input_matrix_1).sum(0) + self.input_bias_1
         else:
             return input
 
@@ -223,8 +212,8 @@ class loaded_network:
             pmf_energies[i] = activities[0] - activities[2]
 
         print(pmf_energies)
-        if self.agent_class == BiRNN:
-            pmf_energies = 0.5 * pmf_energies
+        # if self.agent_class == BiRNN:
+        #     pmf_energies = 0.5 * pmf_energies
         plt.plot(pmf_energies)
         plt.axhline(0, c='k')
         plt.axvline(4, c='k')
@@ -235,11 +224,12 @@ class loaded_network:
         return pmf_energies
 
 if __name__ == "__main__":
-    file = 'mirror_mecha_plus_save_18756433.p'
-    infos = pickle.load(open("./222-2_mirror/" + file, 'rb'))
+    file = 'D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\models\\mecha_plus_sweep_save_46757674.p'
+    infos = pickle.load(open(file, 'rb'))
     reload_net = loaded_network(infos)
 
-    input_seq, train_mask, input_seq_test, test_mask, _, _ = load_data.gib_data(file="./processed_data/all_mice.csv")
+    # set alternate split to true to get stuff
+    input_seq, train_mask, input_seq_test, test_mask, _, _ = load_data.gib_data(file="D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\all_mice.csv")
 
     print(infos['file'])
     print(infos['train_nll_lstm'])
@@ -251,7 +241,7 @@ if __name__ == "__main__":
     print(probs[0][:25])
     print(input_seq[0, :25])
     quit()
-    print(nll_fn_lstm(self.params, input_seq, train_mask))
+    print(reload_net.nll_fn_lstm(input_seq, train_mask))
 
     def create_exp_filter(decay, length):
         weights = jnp.exp(- decay * jnp.arange(length))
@@ -276,6 +266,6 @@ if __name__ == "__main__":
     plt.title(infos['file'] + ' ' + infos['agent_class'], size=fs)
     plt.legend(frameon=False, fontsize=fs)
     plt.tight_layout()
-    plt.savefig(infos['file'] + ' ' + infos['agent_class'] + '.png')
+    plt.savefig("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\reports\\figures\\sebi.png")
     plt.show()
 

@@ -108,8 +108,21 @@ def gather_data_feedback(trials_df, spikes_probe0, spikes_probe1, time_window=[0
 
     return spike_count_feedback_probe0, spike_count_feedback_probe1, cluster_id_probe0, cluster_id_probe1, decoding_variable
 
-def gather_data_prior():
-    return NotImplementedError
+def gather_data_prior(trials_df, spikes_probe0, spikes_probe1, time_window=[-0.6, -0.1],prior='action-kernel'):
+
+    #prior can be glm-hmm or action kernel
+    if prior=='action-kernel':
+        decoding_variable = trials_df['prior-binary']
+    elif prior=='glm-hmm':
+        decoding_variable = trials_df['state']
+    
+    stimonset = trials_df.stimOn_times.values
+    events_prior_tw = np.array([stimonset + time_window[0], stimonset + time_window[1]]).T
+    
+    spike_count_feedback_probe0, cluster_id_probe0 = get_spike_counts_in_bins(spikes_probe0["times"], spikes_probe0["clusters"], events_prior_tw)
+    spike_count_feedback_probe1, cluster_id_probe1 = get_spike_counts_in_bins(spikes_probe1["times"], spikes_probe1["clusters"], events_prior_tw)
+
+    return spike_count_feedback_probe0, spike_count_feedback_probe1, cluster_id_probe0, cluster_id_probe1, decoding_variable
 
 
 def cleanup_data(neural_data, regions):
@@ -155,7 +168,7 @@ def combine_probes(spike_count_stim_probe0, spike_count_stim_probe1, regions_pro
     """
 
     # best place to run filter to see if there are enough neurons from each region
-    MINIMUM_NUMBER = 5
+    MINIMUM_NUMBER = 10
 
     if aggregate:
         # combine neurons from multiple regions into one big chunk
@@ -215,7 +228,8 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
         # find all clusters in region (where region can be a list of regions)
         region_mask = np.isin(beryl_regions, region)
         if sum(region_mask) < minimum_units:
-            print(f"{(region)} below min units threshold ({minimum_units})")
+            #print(f"{(region)} below min units threshold ({minimum_units})")
+            continue
         else:
             # find all spikes in those clusters
             spike_mask = np.isin(spikes['clusters'], clusters[region_mask].index)
@@ -242,6 +256,8 @@ def compute_intervals(trials_df,decoding_interval):
         time_window = [-0.2,0]
     elif decoding_interval=='feedback':
         time_window = [0,0.2]
+    elif decoding_interval =='action-kernel' or decoding_interval=='glm-hmm':
+        time_window=[-0.6, -0.1]
 
 
     if decoding_interval=='stim':
@@ -272,6 +288,15 @@ def compute_intervals(trials_df,decoding_interval):
         decoding_variable = np.concatenate([np.ones((correct_feedback_trials.shape[0])),0*np.ones((incorrect_feedback_trials.shape[0]))])
         intervals = np.array([feedback_times + time_window[0], feedback_times + time_window[1]]).T
     
+    elif decoding_interval =='action-kernel' or decoding_interval=='glm-hmm':
+        if decoding_interval == 'action-kernel':
+            decoding_variable = trials_df['prior-binary']
+        elif decoding_interval == 'glm-hmm':
+            decoding_variable = trials_df['state']
+    
+        stimonset = trials_df.stimOn_times.values
+        intervals = np.array([stimonset + time_window[0], stimonset + time_window[1]]).T
+
     else:
         return NotImplementedError
     

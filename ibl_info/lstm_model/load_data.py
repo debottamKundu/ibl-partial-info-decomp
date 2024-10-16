@@ -67,13 +67,13 @@ def smooth_array(array, window_width):
 
 def gib_data_fast():
 	# load the default dataset directly from numpy saved arrays
-	input_seq = np.load("./processed_data/input_seq.npy")
-	train_mask = np.load("./processed_data/train_mask.npy")
-	input_seq_test = np.load("./processed_data/input_seq_test.npy")
-	test_mask = np.load("./processed_data/test_mask.npy")
+	input_seq = np.load("input_seq.npy")
+	train_mask = np.load("train_mask.npy")
+	input_seq_test = np.load("input_seq_test.npy")
+	test_mask = np.load("test_mask.npy")
 	return input_seq, train_mask, input_seq_test, test_mask
 
-def gib_data(file="./processed_data/all_mice.csv", alternate_split=False):
+def gib_data(file="all_mice.csv", alternate_split=False):
 	"""Return train and test sequences (and the corresponding masks) from the specified file"""
 	if type(file) == tuple:
 		mice_data = pd.read_csv(file[0], low_memory=False)
@@ -93,7 +93,7 @@ def gib_data(file="./processed_data/all_mice.csv", alternate_split=False):
 	mice_data[action_cols]  = np.eye(n_choices)[targets]  # note how the dataset now contains 3 more columns, "action_0", "action_1", "action_2"
 
 	# train and test split
-	if file == "./processed_data/all_mice_plus_trained.csv":
+	if file == "D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\all_mice_plus_trained.csv":
 		assert len(np.unique(mice_data.session)) == 952, "# of sessions has changed"
 		train_eids_1, test_eids_1 = json.load(open("train_eids", 'r')), json.load(open("test_eids", 'r'))
 		train_eids_2, test_eids_2 = json.load(open("train_eids_trained", 'r')), json.load(open("test_eids_trained", 'r'))  # extended dataset
@@ -103,7 +103,7 @@ def gib_data(file="./processed_data/all_mice.csv", alternate_split=False):
 	else:
 		assert len(np.unique(mice_data.session)) == 693, "# of sessions has changed"
 		if not alternate_split:
-			train_eids, test_eids = json.load(open("train_eids", 'r')), json.load(open("test_eids", 'r'))
+			train_eids, test_eids = json.load(open("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\train_eids", 'r')), json.load(open("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\test_eids", 'r'))
 		else:
 			train_eids, test_eids = json.load(open("train_eids_alt", 'r')), json.load(open("test_eids_alt", 'r'))
 		assert len(train_eids) == 403 and len(test_eids) == 68, "Numbers got messed up"
@@ -155,13 +155,13 @@ def create_input_array(eids, data, max_trials, apply_tanh=False):
 	return input_seq, mask, np.array(bias_seq)
 
 if __name__ == "__main__":
-	input_seq, train_mask, input_seq_test, test_mask, train_bias, test_bias = gib_data(file="./processed_data/all_mice.csv")
-	assert np.array_equal(input_seq, np.load("./processed_data/input_seq.npy"))
-	assert np.array_equal(train_mask, np.load("./processed_data/train_mask.npy"))
-	assert np.array_equal(input_seq_test, np.load("./processed_data/input_seq_test.npy"))
-	assert np.array_equal(test_mask, np.load("./processed_data/test_mask.npy"))
-	assert np.array_equal(train_bias, np.load("./processed_data/train_bias.npy"))
-	assert np.array_equal(test_bias, np.load("./processed_data/test_bias.npy"))
+	input_seq, train_mask, input_seq_test, test_mask, train_bias, test_bias = gib_data(file="D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\all_mice.csv")
+	assert np.array_equal(input_seq, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\input_seq.npy"))
+	assert np.array_equal(train_mask, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\train_mask.npy"))
+	assert np.array_equal(input_seq_test, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\input_seq_test.npy"))
+	assert np.array_equal(test_mask, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\test_mask.npy"))
+	assert np.array_equal(train_bias, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\train_bias.npy"))
+	assert np.array_equal(test_bias, np.load("D:\\personal\\phD\\code\\information-decomposition\\ibl-partial-info-decomp\\data\\processed\\test_bias.npy"))
 	print("Data is the same")
 	if False:
 		print("Really re-save data?")
@@ -170,9 +170,9 @@ if __name__ == "__main__":
 			print('Quitting')
 			quit()
 		print("Re-recording...")
-		np.save("./processed_data/input_seq.npy", input_seq)
-		np.save("./processed_data/train_mask.npy", train_mask)
-		np.save("./processed_data/input_seq_test.npy", input_seq_test)
-		np.save("./processed_data/test_mask.npy", test_mask)
-		np.save("./processed_data/train_bias.npy", train_bias)
-		np.save("./processed_data/test_bias.npy", test_bias)
+		np.save("input_seq.npy", input_seq)
+		np.save("train_mask.npy", train_mask)
+		np.save("input_seq_test.npy", input_seq_test)
+		np.save("test_mask.npy", test_mask)
+		np.save("train_bias.npy", train_bias)
+		np.save("test_bias.npy", test_bias)

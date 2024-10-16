@@ -48,7 +48,7 @@ def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
         data[:, idx, :] = aggregate_cluster
     return data, regions
 
-def maintain_neural_count(neural_data, regions, minimum_number = 5):
+def maintain_neural_count(neural_data, regions, minimum_number = 10):
     """
     Ensure that the total number of neurons in each region is greater than a specified minimum number
 
@@ -122,8 +122,11 @@ def discretize_neural_data(neural_data, method='neuron'):
     elif method=='all':
         bin_edges = np.percentile(neural_data, [20,40,60,80])
         discrete_data = np.digitize(neural_data, bin_edges)
+    elif method=='none':
+        return neural_data
     else:
         raise NotImplementedError
+    
     return discrete_data
     
 def subsample(neural_data, decoding_variable, percentage=.75):
