@@ -23,6 +23,7 @@ from brainbox import singlecell
 import numpy as np
 from sklearn.metrics import mutual_info_score
 from tqdm import tqdm
+import pandas as pd
 
 def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
     """generates summed over spike counts for each region, with a time resolution provided beforehand
@@ -100,7 +101,7 @@ def aggregated_regions_time_intervals(spike_counts, cluster_acronyms, average=Fa
         data[:, idx] = aggregate_cluster
     return data, regions
 
-def discretize_neural_data(neural_data, method='neuron'):
+def discretize_neural_data(neural_data, method='neuron', n_bins=4):
     """
     Discretize the spike counts into equipopulated bins
 
@@ -117,16 +118,22 @@ def discretize_neural_data(neural_data, method='neuron'):
         for idx in tqdm(range(neural_data.shape[0])):
 
             row = neural_data[idx, :]
-            bin_edges = np.percentile(row, [20,40,60,80])
-            discrete_data[idx, :] = np.digitize(row, bin_edges)
+            #bin_edges = np.percentile(row, [20,40,60,80])
+            # set bin edges to 4 parts
+            #bin_edges = np.percentile(row, [25,50,75])
+            #discrete_data[idx, :] = np.digitize(row, bin_edges)
+            discrete_row, bin_edges_p = pd.qcut(row, q=n_bins, labels=False, duplicates='drop', retbins=True)
+            discrete_data[idx, :] = discrete_row
     elif method=='all':
         bin_edges = np.percentile(neural_data, [20,40,60,80])
+        # set bin edges to 4 parts
+        #bin_edges = np.percentile(neural_data, [25,50,75])
         discrete_data = np.digitize(neural_data, bin_edges)
     elif method=='none':
         return neural_data
     else:
         raise NotImplementedError
-    
+    discrete_data = np.nan_to_num(discrete_data, nan=0)
     return discrete_data
     
 def subsample(neural_data, decoding_variable, percentage=.75):

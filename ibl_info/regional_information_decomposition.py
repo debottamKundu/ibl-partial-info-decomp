@@ -4,7 +4,6 @@ from brainbox.population.decode import get_spike_counts_in_bins
 from brainbox.io.one import SpikeSortingLoader, SessionLoader
 from brainbox.ephys_plots import plot_brain_regions
 from brainbox.behavior.wheel import velocity
-from brainbox.task.trials import get_event_aligned_raster, get_psth
 from iblatlas.atlas import AllenAtlas
 from brainwidemap import bwm_query, load_good_units, load_trials_and_mask, bwm_units
 from brainbox.behavior.training import compute_performance, plot_psychometric, plot_reaction_time
@@ -22,6 +21,7 @@ import itertools
 import pickle as pkl
 from tqdm import tqdm
 from pathlib import Path
+from brainbox.singlecell import bin_spikes2D
 
 from ibl_info.broja_pid import compute_pid, coinformation
 from ibl_info.utility import discretize_neural_data
@@ -254,3 +254,24 @@ if __name__=='__main__':
 
     # setup done
     calculate_cortical_hierachy(one, list_of_regions, list_of_eids)
+
+
+"""
+## TODO: for ephys
+
+1. Filter neurons before computing mutual information based on firing rate
+    use ibl function for firing rate
+2. Compute MI, check for significance, or set threshold (hacky)
+2. Run PID only on neurons with meaningful MI
+3. Check trivariate MI to see if it is more or less; must be more?
+4. Block neurons by region
+    then compute PID
+    it will also be easy to mix and match neurons from different regions.
+
+## TODO :for rnns
+1. hacky rnn code to train
+2. modular rnn, see how modules look like:
+3. behavior; modular structure really represented or not
+4. if training actually works or not
+    remember no hidden state reset.
+"""

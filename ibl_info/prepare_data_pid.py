@@ -206,8 +206,13 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
 
     # find valid regions
 
+    
+
     brainreg = BrainRegions()
     beryl_regions = brainreg.acronym2acronym(clusters['acronym'], mapping="Beryl")
+
+    if len(regions)==0:
+        regions = beryl_regions
     
     # print found regions
     for region in regions:
