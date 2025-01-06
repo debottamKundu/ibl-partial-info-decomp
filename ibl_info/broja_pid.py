@@ -1,10 +1,10 @@
 import ibl_info.BROJA_2PID as broja
 import numpy as np
-import pyentrp
+
 
 def build_probability_distribution(Y, X1, X2):
     """
-    Generate a trivariate probability distribution for 
+    Generate a trivariate probability distribution for
     one target variable and 2 source variables
 
     Args:
@@ -12,7 +12,7 @@ def build_probability_distribution(Y, X1, X2):
         X1 (np.array): Source 1
         X2 (np.array): Source 2
     """
-    
+
     Y = np.asarray(Y, dtype=np.int16)
     X1 = np.asarray(X1, dtype=np.int16)
     X2 = np.asarray(X2, dtype=np.int16)
@@ -25,12 +25,13 @@ def build_probability_distribution(Y, X1, X2):
             counts[(Y[i], X1[i], X2[i])] += 1
         else:
             counts[(Y[i], X1[i], X2[i])] = 1
-    
+
     pmf = dict()
     for xyz, c in counts.items():
         pmf[xyz] = c / float(n_samples)
-    
+
     return pmf
+
 
 def compute_pid(Y, X1, X2):
     """
@@ -44,12 +45,14 @@ def compute_pid(Y, X1, X2):
 
     dirty_pdf = build_probability_distribution(Y, X1, X2)
     info_decomposition = broja.pid(dirty_pdf, output=0)
-    return np.asarray([
-        info_decomposition["UIY"],
-        info_decomposition["UIZ"],
-        info_decomposition["SI"],
-        info_decomposition["CI"],
-    ])
+    return np.asarray(
+        [
+            info_decomposition["UIY"],
+            info_decomposition["UIZ"],
+            info_decomposition["SI"],
+            info_decomposition["CI"],
+        ]
+    )
 
 
 def split_data(Y, X1, X2, splits):
@@ -67,10 +70,9 @@ def split_data(Y, X1, X2, splits):
     x2_partitions = np.array_split(X2_shuffled, splits)
 
     return y_partitions, x1_partitions, x2_partitions
-                     
 
 
-def compute_pid_unbiased(Y, X1, X2, repeats = 1): 
+def compute_pid_unbiased(Y, X1, X2, repeats=1):
     """
     compute unbiased PID terms using Quadratic estimation
     PID_plugin = PID_true + a/N + b/N2
@@ -87,8 +89,7 @@ def compute_pid_unbiased(Y, X1, X2, repeats = 1):
     pid_unbiased = np.zeros((4))
     # for complete data, i/e, Iplugin
     pid_array[0, :] = compute_pid(Y, X1, X2)
-    
-    
+
     # i'll just do this subsampling once, maybe we should do it more times
 
     for idx in range(1, len(n_partitions)):
@@ -102,44 +103,42 @@ def compute_pid_unbiased(Y, X1, X2, repeats = 1):
             # now what
             pid_temp = compute_pid(y_temp, x1_temp, x2_temp)
 
-            
-            if splits==2:
-                pid_array[idx, :] = pid_array[idx, :] + pid_temp/2
-            elif splits==4:
-                pid_array[idx, :] = pid_array[idx, :] + pid_temp/4
-    
+            if splits == 2:
+                pid_array[idx, :] = pid_array[idx, :] + pid_temp / 2
+            elif splits == 4:
+                pid_array[idx, :] = pid_array[idx, :] + pid_temp / 4
+
     # should have 3 pids completely ready
     # now to run polyfit, etc
 
-    x_extrap = n_partitions/n_trials
-    
+    x_extrap = n_partitions / n_trials
+
     # for each column of pid_array, fit an equation:
-    params = np.zeros((4,3)) # since QE 
-    for idx in range(0,4):
-        values = pid_array[:, idx] # 0 is U1, 1 is U2, 2 is SI and 3 is CI
+    params = np.zeros((4, 3))  # since QE
+    for idx in range(0, 4):
+        values = pid_array[:, idx]  # 0 is U1, 1 is U2, 2 is SI and 3 is CI
         params[idx, :] = np.polyfit(x_extrap, values, 2)
-        pid_unbiased[idx] = params[idx, 2] # NOTE: divide here when we do more repetations
+        pid_unbiased[idx] = params[idx, 2]  # NOTE: divide here when we do more repetations
 
     return pid_unbiased
 
 
-
 def MI(Y, X):
-    #TODO: clean this up
+    # TODO: clean this up
     # annoying but quick
     dirty_pdf = build_probability_distribution(Y, X, X)
     MIYX = broja.I_Y(dirty_pdf)
     return MIYX
 
-def unbiasedMI(Y, X, repeats = 1):
+
+def unbiasedMI(Y, X, repeats=1):
     n_trials = len(Y)
     n_partitions = np.asarray([1, 2, 4])
     mi_array = np.zeros((len(n_partitions)))
     mi_unbiased = 0
     # for complete data, i/e, Iplugin
     mi_array[0] = MI(Y, X)
-    
-    
+
     # i'll just do this subsampling once, maybe we should do it more times
 
     for idx in range(1, len(n_partitions)):
@@ -151,24 +150,25 @@ def unbiasedMI(Y, X, repeats = 1):
             x_temp = x_part[parts]
             # now what
             mi_temp = MI(y_temp, x_temp)
-            if splits==2:
-                mi_array[idx] = mi_array[idx] + mi_temp/2
-            elif splits==4:
-                mi_array[idx] = mi_array[idx] + mi_temp/4
-    
+            if splits == 2:
+                mi_array[idx] = mi_array[idx] + mi_temp / 2
+            elif splits == 4:
+                mi_array[idx] = mi_array[idx] + mi_temp / 4
+
     # should have 3 pids completely ready
     # now to run polyfit, etc
 
-    x_extrap = n_partitions/n_trials
-    
+    x_extrap = n_partitions / n_trials
+
     # for each column of mi_array, fit an equation:
-    params = np.zeros((3)) # since QE 
-    
+    params = np.zeros((3))  # since QE
+
     # 0 is U1, 1 is U2, 2 is SI and 3 is CI
     params = np.polyfit(x_extrap, mi_array, 2)
-    mi_unbiased = params[2] # NOTE: divide here when we do more repetations
+    mi_unbiased = params[2]  # NOTE: divide here when we do more repetations
 
     return mi_unbiased
+
 
 def coinformation(Y, X1, X2):
     """
@@ -186,4 +186,4 @@ def coinformation(Y, X1, X2):
     MIYX1 = broja.I_Y(dirty_pdf)
     MIYX2 = broja.I_Z(dirty_pdf)
 
-    return [MIYX1X2 - MIYX1 - MIYX2, MIYX1X2, MIYX1, MIYX2] 
+    return [MIYX1X2 - MIYX1 - MIYX2, MIYX1X2, MIYX1, MIYX2]
