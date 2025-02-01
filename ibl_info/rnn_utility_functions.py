@@ -8,11 +8,13 @@ from matplotlib import pyplot as plt
 import pickle as pkl
 
 from ibl_info.broja_pid import compute_pid, coinformation, compute_pid_unbiased, unbiasedMI, MI
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tqdm import tqdm
 import itertools
 import seaborn as sns
 from glob import glob
 import re
+from joblib import Parallel, delayed
 
 ## load one session, and organize everything in one function
 
@@ -243,7 +245,7 @@ def plot_probability_buildup(session_data, iteration):
     )
 
     incorrect_trials = np.array(
-        last_time_steps[last_time_steps["correct_action_taken"] != 1][
+        last_time_steps[last_time_steps["correct_action_taken"] == 0][
             "trial_within_session"
         ].values,
         dtype=int,
@@ -324,30 +326,50 @@ def plot_probability_buildup_noaction(session_data, iteration):
     plt.show()
 
 
-def plot_probability_buildup_per_strength(session_data, iteration):
+def compute_concordant_proportions(df_group):
+    return np.asarray(
+        [
+            np.sum(df_group["concordant_trial"].values == 0),
+            np.sum(df_group["concordant_trial"].values == 1),
+        ]
+    )
+
+
+def plot_probability_buildup_per_strength(session_data, iteration, decision_threshold=0.9):
 
     max_number_of_steps = 7
 
     last_time_steps = session_data[session_data["trial_end"] == 1]
 
     correct_trials = np.array(
-        last_time_steps[last_time_steps["correct_action_taken"] == 1][
-            "trial_within_session"
-        ].values,
+        last_time_steps[
+            (last_time_steps["correct_action_taken"] == 1) & (last_time_steps["action_taken"] == 1)
+        ]["trial_within_session"].values,
         dtype=int,
     )
 
     incorrect_trials = np.array(
-        last_time_steps[last_time_steps["correct_action_taken"] != 1][
-            "trial_within_session"
-        ].values,
+        last_time_steps[
+            (last_time_steps["correct_action_taken"] == 0) & (last_time_steps["action_taken"] == 1)
+        ]["trial_within_session"].values,
         dtype=int,
     )
+
+    # also add the no action trials
+    noaction_trials = np.array(
+        last_time_steps[last_time_steps["action_taken"] == 0]["trial_within_session"].values,
+        dtype=int,
+    )
+
     # number of trial strengths
     unique_strengths = np.sort(session_data.trial_strength.unique())
     correct_trial_buildup = np.zeros((len(unique_strengths), max_number_of_steps, 2))
     incorrect_trial_buildup = np.zeros((len(unique_strengths), max_number_of_steps, 2))
+    noaction_trial_buildup = np.zeros((len(unique_strengths), max_number_of_steps, 2))
 
+    trial_proportions = np.zeros((len(unique_strengths), 2, 3))  # correct, incorrect and no-action
+
+    # correct trials
     for trial_strength, df_group in session_data[
         session_data["trial_within_session"].isin(correct_trials)
     ].groupby("trial_strength"):
@@ -360,7 +382,9 @@ def plot_probability_buildup_per_strength(session_data, iteration):
         location = np.argwhere(trial_strength == unique_strengths)
         correct_trial_buildup[location, :, 0] = correct_action_buildup_mean
         correct_trial_buildup[location, :, 1] = correct_action_buildup_std
+        trial_proportions[location, :, 0] = compute_concordant_proportions(df_group)
 
+    # incorrect trials
     for trial_strength, df_group in session_data[
         session_data["trial_within_session"].isin(incorrect_trials)
     ].groupby("trial_strength"):
@@ -373,6 +397,24 @@ def plot_probability_buildup_per_strength(session_data, iteration):
         location = np.argwhere(trial_strength == unique_strengths)
         incorrect_trial_buildup[location, :, 0] = incorrect_action_buildup_mean
         incorrect_trial_buildup[location, :, 1] = incorrect_action_buildup_std
+        trial_proportions[location, :, 1] = compute_concordant_proportions(df_group)
+
+    # no action trials
+    counts = np.zeros((len(unique_strengths)))
+    for trial_strength, df_group in session_data[
+        session_data["trial_within_session"].isin(noaction_trials)
+    ].groupby("trial_strength"):
+        no_action_buildup_mean = (
+            df_group.groupby("rnn_step_index")["correct_action_prob"].mean().values
+        )
+        no_action_buildup_std = (
+            df_group.groupby("rnn_step_index")["correct_action_prob"].std().values
+        )
+        location = np.argwhere(trial_strength == unique_strengths)
+        noaction_trial_buildup[location, :, 0] = no_action_buildup_mean
+        noaction_trial_buildup[location, :, 1] = no_action_buildup_std
+        counts[location] = df_group.shape[0] / max_number_of_steps
+        trial_proportions[location, :, 2] = compute_concordant_proportions(df_group)
 
     # compute fraction of correct and incorrect trials for every stimulus strength
     fraction_corrects = np.zeros((len(unique_strengths), 2))
@@ -385,17 +427,20 @@ def plot_probability_buildup_per_strength(session_data, iteration):
     # now plot
     title_fractions = np.round(fraction_corrects[:, 1] / np.sum(fraction_corrects, axis=1), 2)
 
-    fig, axes = plt.subplots(figsize=(12, 5), ncols=3, nrows=2, sharex=True, sharey=True)
+    fig, axes = plt.subplots(figsize=(16, 8), ncols=3, nrows=2, sharex=True, sharey=True)
 
     for idx, ax in enumerate(axes.flatten()):
 
         trial_strength = unique_strengths[idx]
+        factor = np.sum(trial_proportions[idx, :], axis=1, keepdims=True)
         ax.errorbar(
             np.arange(max_number_of_steps),
             correct_trial_buildup[idx, :, 0],
             yerr=correct_trial_buildup[idx, :, 1] / 2,
             fmt="o-",
             label="Correct Trials",
+            color="blue",
+            alpha=0.75,
         )
         ax.errorbar(
             np.arange(max_number_of_steps),
@@ -403,16 +448,52 @@ def plot_probability_buildup_per_strength(session_data, iteration):
             yerr=incorrect_trial_buildup[idx, :, 1] / 2,
             fmt="o-",
             label="Incorrect Trials",
+            color="red",
+            alpha=0.75,
         )
-        ax.set_title(f"Strength={trial_strength}, Fraction correct:{title_fractions[idx]}")
-        ax.set_ylim([0, 1.2])
+        ax.errorbar(
+            np.arange(max_number_of_steps),
+            noaction_trial_buildup[idx, :, 0],
+            yerr=noaction_trial_buildup[idx, :, 1] / 2,
+            fmt="o-",
+            label="No action Trials",
+            color="black",
+            alpha=0.75,
+        )
+
+        # plot insets for concordant vs non-concordant trials
+        A = trial_proportions[idx, :] / factor
+
+        ax_inset = inset_axes(
+            ax, width="20%", height="15%", loc="upper left"
+        )  # Adjust size and location
+        A = A.T
+        ax_inset.bar(
+            np.arange(2) - 0.33, A[0, :], width=0.33, label="correct", alpha=0.75, color="blue"
+        )
+        ax_inset.bar(np.arange(2), A[1, :], width=0.33, label="incorrect", alpha=0.75, color="red")
+        ax_inset.bar(
+            np.arange(2) + 0.33, A[2, :], width=0.33, label="noaction", alpha=0.75, color="black"
+        )
+        ax_inset.set_xticks(np.arange(2), ["NC", "C"])
+        ax_inset.set_ylim(0, 1)
+
+        ax_inset.spines["top"].set_visible(False)
+        ax_inset.spines["right"].set_visible(False)
+
+        # if idx == 0:
+        #     ax_inset.legend()
+        ax.set_title(
+            f"Strength={trial_strength}, Fraction correct:{title_fractions[idx]}, No action: {counts[idx]}"
+        )
+        ax.set_ylim([0, 1.3])
         ax.set_xlabel("Time step")
         ax.set_ylabel("Correct action probability")
-        ax.axhline(y=0.9, color="r", linestyle="--", label="decision-threshold")
+        ax.axhline(y=decision_threshold, color="r", linestyle="--", label="decision-threshold")
 
-    plt.legend()
+    ax.legend()
     fig.suptitle(f"Model behavior at iteration {iteration}")
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.show()
 
 
@@ -539,8 +620,8 @@ def plot_frozen_behavior(proportions, trial_correct_values, checkpoint_numbers, 
     ax[1].set_ylabel("Number of trials")
     ax[1].legend()
     if frozen:
-        ax[0].set_xlabel("Iterations after rnn-frozed")
-        ax[1].set_xlabel("Iterations after rnn-frozed")
+        ax[0].set_xlabel("Iterations after rnn-freeze")
+        ax[1].set_xlabel("Iterations after rnn-freeze")
     else:
         ax[0].set_xlabel("Iterations")
         ax[1].set_xlabel("Iterations")
@@ -686,3 +767,157 @@ def compute_mutual_information(session_data, unbiased=False):
         bayes_prior_mi,
         correct_action_mi,
     )
+
+
+def organize_data_classification(session_data, timestep):
+    """organize the data for the     linear classification
+
+    Args:
+        session_data (pd.df): dataframe with rnn behavior
+        timestep (int): timestep for session_data
+    """
+    t_x = session_data.loc[
+        session_data["rnn_step_index"] == timestep,
+        [
+            "block_side",
+            "trial_within_session",
+            "trial_strength",
+            "action_side",
+            "trial_side",
+            "correct_action_taken",
+            "hidden_state",
+            "left_stimulus",
+            "right_stimulus",
+            "rnn_step_index",
+            "correct_action_prob",
+            "left_action_prob",
+            "right_action_prob",
+            "concordant_trial",
+        ],
+    ]
+
+    # get block and action side
+    block_side = t_x["block_side"].values
+    stimulus_side = t_x["trial_side"].values
+
+    all_hidden_state = np.concatenate(session_data.hidden_state)
+    discrete_hidden_state = hidden_layer_binning(all_hidden_state)
+
+    indexes = t_x.index.values
+    hidden_state_t_x_discrete = discrete_hidden_state[indexes, :]
+    hidden_state_t_x_normal = all_hidden_state[indexes, :]
+
+    return block_side, stimulus_side, hidden_state_t_x_discrete, hidden_state_t_x_normal
+
+
+def parallelize_computation(session_data, t_x, hidden_state, bayes_discrete):
+
+    indexes = t_x.index.values
+    hidden_state_t_x = hidden_state[
+        indexes, :
+    ].T  # because informationd decomposition expects neurons x trials
+
+    pid_information_trial, coinformation_data_trial = compute_information_decomposition(
+        t_x["trial_side"].values,
+        hidden_state_t_x,
+    )
+
+    pid_information_block, coinformation_data_block = compute_information_decomposition(
+        t_x["block_side"].values,
+        hidden_state_t_x,
+    )
+
+    actions = session_data.loc[
+        session_data["rnn_step_index"] == 6, ["action_side"]
+    ].values.reshape(
+        -1,
+    )
+    valid_mask = ~np.isnan(actions)
+
+    actions[~valid_mask] = 0
+    pid_information_action_side, coinformation_data_action_side = (
+        compute_information_decomposition(
+            actions,
+            hidden_state_t_x,
+        )
+    )
+
+    # replaced this with block prior
+    pid_information_bayes, coinformation_data_bayes = compute_information_decomposition(
+        bayes_discrete,
+        hidden_state_t_x,
+    )
+
+    # now stack all pid informations
+
+    info_decom_trial = np.hstack([pid_information_trial, coinformation_data_trial])
+    info_decom_block = np.hstack([pid_information_block, coinformation_data_block])
+    info_decom_action = np.hstack([pid_information_action_side, coinformation_data_action_side])
+    info_decom_bayes = np.hstack([pid_information_bayes, coinformation_data_bayes])
+
+    return info_decom_trial, info_decom_block, info_decom_action, info_decom_bayes
+
+
+def information_decomposition_all(session_data):
+    """compute information decomposition across hidden units, fore each epoch
+
+    Args:
+        session_data (pd.df): Session behavior
+    """
+    # calcualte bayes prior and discretize it
+    tend = session_data[session_data["rnn_step_index"] == 6]
+    side = tend["trial_side"].values
+    action = tend["action_side"].values
+    action[np.isnan(action)] = 0
+    bayesian_prior = optimal_bayesian(side, 0.02).detach().numpy()
+    bayes_discrete = probability_binning(bayesian_prior)
+
+    # # compute pids, stack and then append : makes sense
+    # trial_side_pid = []
+    # block_side_pid = []
+    # action_side_pid = []
+    # bayes_prior_pid = []
+
+    all_hidden_state = np.concatenate(session_data.hidden_state)
+    discrete_hidden_state = hidden_layer_binning(all_hidden_state)
+
+    t_x_splits = []
+
+    for x in range(0, 7):
+        t_x = session_data.loc[
+            session_data["rnn_step_index"] == x,
+            [
+                "block_side",
+                "trial_within_session",
+                "trial_strength",
+                "action_side",
+                "trial_side",
+                "correct_action_taken",
+                "hidden_state",
+                "left_stimulus",
+                "right_stimulus",
+                "rnn_step_index",
+                "correct_action_prob",
+                "left_action_prob",
+                "right_action_prob",
+                "concordant_trial",
+            ],
+        ]
+        t_x_splits.append(t_x)
+
+    # now what
+    results = Parallel(n_jobs=-1)(
+        delayed(parallelize_computation)(
+            session_data, t_x_splits[idx], discrete_hidden_state, bayes_discrete
+        )
+        for idx in tqdm(range(len(t_x_splits)), desc="Running for different tx")
+    )
+
+    trial_side_pid, block_side_pid, action_side_pid, bayes_prior_pid = zip(*results)
+
+    final_trial_side_pid = np.stack(trial_side_pid, axis=0)
+    final_block_side_pid = np.stack(block_side_pid, axis=0)
+    final_action_side_pid = np.stack(action_side_pid, axis=0)
+    final_bayes_prior_pid = np.stack(bayes_prior_pid, axis=0)
+
+    return final_trial_side_pid, final_block_side_pid, final_action_side_pid, final_bayes_prior_pid
