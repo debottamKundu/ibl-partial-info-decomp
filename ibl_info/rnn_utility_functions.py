@@ -25,6 +25,22 @@ def load_session(path):
     return rnn_model["session_data"]
 
 
+def freeman_daconis_bin_size(signal):
+    """
+    Chooses bin size based on the IQR of the data
+
+    Args:
+        signal (np.array): 1xtrials
+
+    Returns:
+        bin_size
+    """
+    iqr = np.percentile(signal, 75) - np.percentile(signal, 25)
+    bin_width = 2 * iqr / (len(signal) ** (1 / 3))
+    num_bins_fd = int((signal.max() - signal.min()) / bin_width)
+    return num_bins_fd
+
+
 def equipopulated_binning(signal, n_bins=6):
     """
     Discretize the hidden state into equipopulated bins
@@ -211,7 +227,7 @@ def computeMI(hidden_state, target, unbiased=False):
     """compute the mutual information between each neuron and a target variable
 
     Args:
-        hidden_state (np.array): timepoints x neurons, discretized already
+        hidden_state (np.array): timepoints x neurons, discretized already or trials x neurons
         target (np.array): target variable, discretized already
 
     Returns:
