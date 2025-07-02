@@ -3,14 +3,13 @@
 # - helpers for plotting results
 # - computing PID for a target and 2 sources
 # - computing net synergy/redundancy for one target and two sources
-# - computing just MI 
+# - computing just MI
 
 
 from one.api import ONE
 from brainbox.population.decode import get_spike_counts_in_bins
 from brainbox.io.one import SpikeSortingLoader, SessionLoader
 from brainbox.ephys_plots import plot_brain_regions
-from brainbox.behavior.wheel import velocity
 from brainbox.task.trials import get_event_aligned_raster, get_psth
 from iblatlas.atlas import AllenAtlas
 from brainwidemap import bwm_query, load_good_units, load_trials_and_mask, bwm_units
@@ -24,6 +23,7 @@ import numpy as np
 from sklearn.metrics import mutual_info_score
 from tqdm import tqdm
 import pandas as pd
+
 
 def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
     """generates summed over spike counts for each region, with a time resolution provided beforehand
@@ -49,7 +49,8 @@ def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
         data[:, idx, :] = aggregate_cluster
     return data, regions
 
-def maintain_neural_count(neural_data, regions, minimum_number = 10):
+
+def maintain_neural_count(neural_data, regions, minimum_number=10):
     """
     Ensure that the total number of neurons in each region is greater than a specified minimum number
 
@@ -59,15 +60,20 @@ def maintain_neural_count(neural_data, regions, minimum_number = 10):
         minimum_number (int) : minimum number of neurons in each region required to pass, defaults to 5
     """
 
-    
-    unique_regions, neuron_per_region = np.unique(regions, return_counts= True)
-    valid_regions_idx = np.argwhere(neuron_per_region>minimum_number)
-    valid_regions = unique_regions[valid_regions_idx].reshape(-1,)
+    unique_regions, neuron_per_region = np.unique(regions, return_counts=True)
+    valid_regions_idx = np.argwhere(neuron_per_region > minimum_number)
+    valid_regions = unique_regions[valid_regions_idx].reshape(
+        -1,
+    )
 
     # now to get only data from valid regions
-    region_idx = np.argwhere(np.isin(regions, valid_regions)).reshape(-1,)
+    region_idx = np.argwhere(np.isin(regions, valid_regions)).reshape(
+        -1,
+    )
     neural_data = neural_data[region_idx, :]
-    regions = regions[region_idx].reshape(-1,)
+    regions = regions[region_idx].reshape(
+        -1,
+    )
 
     return neural_data, regions
 
@@ -84,59 +90,61 @@ def aggregated_regions_time_intervals(spike_counts, cluster_acronyms, average=Fa
 
     # remember that here the data structure for spike counts is trials x neurons
     spike_counts, cluster_acronyms = maintain_neural_count(spike_counts.T, cluster_acronyms)
-    spike_counts = spike_counts.T # flip it back into trials x neurons
+    spike_counts = spike_counts.T  # flip it back into trials x neurons
 
     regions = np.unique(cluster_acronyms)
-    data = np.zeros(
-        (spike_counts.shape[0],len(regions)) # trials x regions
-    )  
+    data = np.zeros((spike_counts.shape[0], len(regions)))  # trials x regions
     for idx, r in enumerate(regions):
         neurons = np.argwhere(cluster_acronyms == r).reshape(
             -1,
         )
         if average:
-            aggregate_cluster = np.sum(spike_counts[:, neurons], axis=1)//len(neurons)
+            aggregate_cluster = np.sum(spike_counts[:, neurons], axis=1) // len(neurons)
         else:
             aggregate_cluster = np.sum(spike_counts[:, neurons], axis=1)
         data[:, idx] = aggregate_cluster
     return data, regions
 
-def discretize_neural_data(neural_data, method='neuron', n_bins=4):
+
+def discretize_neural_data(neural_data, method="neuron", n_bins=4):
     """
     Discretize the spike counts into equipopulated bins
 
     Args:
         neural_data (np.array): spike counts for neurons x trials
-        method (str, optional): how to determine the percenille. 
+        method (str, optional): how to determine the percenille.
                                 Defaults to 'neuron'. Calculate the percentile per neuron
                                 Other options: 'all': Calculate the percentile based on the entire dataset
     """
     print(neural_data.shape, method)
-    if method=='neuron':
+    if method == "neuron":
         discrete_data = np.zeros((neural_data.shape[0], neural_data.shape[1]))
         # discretize per recorded neuron
         for idx in tqdm(range(neural_data.shape[0])):
 
             row = neural_data[idx, :]
-            #bin_edges = np.percentile(row, [20,40,60,80])
+            # bin_edges = np.percentile(row, [20,40,60,80])
             # set bin edges to 4 parts
-            #bin_edges = np.percentile(row, [25,50,75])
-            #discrete_data[idx, :] = np.digitize(row, bin_edges)
-            discrete_row, bin_edges_p = pd.qcut(row, q=n_bins, labels=False, duplicates='drop', retbins=True)
+            # bin_edges = np.percentile(row, [25,50,75])
+            # discrete_data[idx, :] = np.digitize(row, bin_edges)
+            discrete_row, bin_edges_p = pd.qcut(
+                row, q=n_bins, labels=False, duplicates="drop", retbins=True
+            )
             discrete_data[idx, :] = discrete_row
-    elif method=='all':
-        bin_edges = np.percentile(neural_data, [20,40,60,80])
+    elif method == "all":
+        bin_edges = np.percentile(neural_data, [20, 40, 60, 80])
         # set bin edges to 4 parts
-        #bin_edges = np.percentile(neural_data, [25,50,75])
+        # bin_edges = np.percentile(neural_data, [25,50,75])
         discrete_data = np.digitize(neural_data, bin_edges)
-    elif method=='none':
+    elif method == "none":
         return neural_data
     else:
         raise NotImplementedError
     discrete_data = np.nan_to_num(discrete_data, nan=0)
     return discrete_data
-    
-def subsample(neural_data, decoding_variable, percentage=.75):
+
+
+def subsample(neural_data, decoding_variable, percentage=0.75):
     """
     Subsample a portion of the trials
 
@@ -146,8 +154,13 @@ def subsample(neural_data, decoding_variable, percentage=.75):
     """
 
     total_trials = neural_data.shape[1]
-    subsampled = int(total_trials*percentage)
+    subsampled = int(total_trials * percentage)
     trials_sampled = np.random.choice(np.arange(0, total_trials), subsampled, replace=False)
     neural_data = neural_data[:, np.sort(trials_sampled).astype(np.int16)]
     decoding_variable = decoding_variable[np.sort(trials_sampled).astype(np.int16)]
     return neural_data, decoding_variable
+
+
+def download_data(one, pid):
+    spikes, clusters = load_good_units(one, pid, compute_metrics=False)
+    return spikes, clusters
