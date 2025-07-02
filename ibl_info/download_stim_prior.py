@@ -3,6 +3,7 @@ from one.api import ONE
 from brainbox.io.one import SessionLoader
 from brainwidemap import bwm_units, bwm_query
 import pandas as pd
+from tqdm import tqdm
 
 
 if __name__ == "__main__":
@@ -43,8 +44,12 @@ if __name__ == "__main__":
     units_regions_of_interest = unit_df[unit_df["Beryl"].isin(important_regions)]
     eids = units_regions_of_interest["eid"].unique()
 
-    for eid in eids:
+    for eid in tqdm(eids):
 
         pids, probes = one.eid2pid(eid)
         for pid in pids:
-            download_data(one, pid)
+            try:
+                download_data(one, pid)
+            except Exception as e:
+                print(e)
+                
