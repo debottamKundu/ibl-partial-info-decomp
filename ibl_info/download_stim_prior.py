@@ -46,10 +46,12 @@ if __name__ == "__main__":
 
     for eid in tqdm(eids):
 
-        pids, probes = one.eid2pid(eid)
-        for pid in pids:
-            try:
+        try:
+            pids, probes = one.eid2pid(eid)
+
+            for pid in pids:
+
                 download_data(one, pid)
-            except Exception as e:
-                print(e)
-                
+        except Exception as e:
+            print(e)
+            print(f"Downloading failed for spike sorting data, eid {eid}, skipping")
