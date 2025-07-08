@@ -27,6 +27,7 @@ import itertools
 from decision_rnn.information_measures.processing import equipopulated_binning
 import ibl_info.measures.information_measures as info
 
+
 def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
     """generates summed over spike counts for each region, with a time resolution provided beforehand
 
@@ -218,8 +219,8 @@ def compute_mutual_information(neural_data, decoding_variable):
 
 
 def compute_pid(data, targets, unbiased_measure="quadratic"):
-    
-    sources = generate_source_ids(data.shape[0]))
+
+    sources = generate_source_ids(data.shape[0])
     pid_information = np.zeros((len(sources), 4))  # neuronsC2 x 4
     for idx in tqdm(
         range(len(sources)), desc="Running for all sources", leave=False

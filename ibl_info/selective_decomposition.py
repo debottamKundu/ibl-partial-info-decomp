@@ -34,7 +34,7 @@ from ibl_info.utility import alternate_discretize, compute_mutual_information, c
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, region, minimum_units=10
+        spikes, clusters, intervals, [region], minimum_units=10
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
     # i flip it
@@ -47,7 +47,7 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
     spike_data = binned_spikes[0].T
     # clean this up ; throw away non-responsive neurons
     cleaned_binned_spikes = cleaned_regions_single_region(
-        binned_spikes, percent_of_no_spikes_threshold=0.3
+        spike_data, percent_of_no_spikes_threshold=0.3
     )
 
     # use the alternate binning
@@ -75,17 +75,12 @@ def prepare_neural_data(session_id, epoch, one, region):
     # that makes sense
 
     window = get_window(epoch)
+    print(window)
+
     trials, mask = load_trials_and_mask(
         one, session_id, exclude_nochoice=True, exclude_unbiased=True
     )
     trials = trials[mask]
-
-    # now we need a new interval function that outputs
-    # 1. congruent trials
-    # 2. incongruent trials
-    # 3. middling incongruent trials
-    # 4. all trials
-    # we will do decomposition on all of these, naturally.
 
     # for now we are looking at just (stimulus interval)
     # we know the order
@@ -125,23 +120,26 @@ def run_selective_decomposition(one, list_of_regions, epoch):
         region_pickle = {}
         for eid in tqdm(selective_eids):
 
+            # if eids_done >= 2:
+            #     break
             try:
                 information_pickle = prepare_neural_data(eid, epoch, one, region)
                 region_pickle[eid] = information_pickle
+                eids_done += 1
             except Exception as e:
                 print(e)
                 continue
 
-        with open(f"./data/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
+        with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
 
 
 if __name__ == "__main__":
 
     important_regions = [
+        "VISp",
         "MOs",
         "SSp-ul",
-        "VISp",
         "ACAd",
         "PL",
         "CP",
@@ -167,4 +165,4 @@ if __name__ == "__main__":
     ]
 
     one = ONE()
-    run_selective_decomposition(one, important_regions, "stimulus")
+    run_selective_decomposition(one, important_regions, "stim")

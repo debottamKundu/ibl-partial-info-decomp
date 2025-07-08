@@ -313,7 +313,7 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
         # find all clusters in region (where region can be a list of regions)
         region_mask = np.isin(beryl_regions, region)
         if sum(region_mask) < minimum_units:
-            # print(f"{(region)} below min units threshold ({minimum_units})")
+            print(f"{(region)} below min units threshold ({minimum_units})")
             continue
         else:
             # find all spikes in those clusters
