@@ -23,10 +23,13 @@ import numpy as np
 from sklearn.metrics import mutual_info_score
 from tqdm import tqdm
 import pandas as pd
-
+import itertools
+from decision_rnn.information_measures.processing import equipopulated_binning
+import ibl_info.measures.information_measures as info
 
 def aggregated_regions_time_resolved(binned_spike_counts, cluster_acronyms):
     """generates summed over spike counts for each region, with a time resolution provided beforehand
+
 
     Args:
         binned_spike_counts (np.array): trials x neurons x timepoints
@@ -164,3 +167,69 @@ def subsample(neural_data, decoding_variable, percentage=0.75):
 def download_data(one, pid):
     spikes, clusters = load_good_units(one, pid, compute_metrics=False)
     return spikes, clusters
+
+
+def generate_source_ids(number_of_neurons):
+    combinations_neuronids = []
+    for x in itertools.combinations(range(number_of_neurons), 2):
+        combinations_neuronids.append([x[0], x[1]])
+
+    combinations_neuronids = np.asarray(combinations_neuronids)
+    return combinations_neuronids
+
+
+def discretize(spike_data, n_bins=5):
+    """discretize into specified number of equipopulated bins
+
+    Args:
+        spike_data (np.array): neurons x trials
+    """
+
+    discrete_data = np.zeros_like(spike_data)
+    for neurons in range(spike_data.shape[0]):
+        discrete_data[neurons, :] = equipopulated_binning(spike_data[neurons, :], n_bins=n_bins)
+    return discrete_data
+
+
+def alternate_discretize(spike_data, n_bins=5):
+    """
+    if the neurons don't fire enough, maybe it makes more sense to just round down the greater>5 ones into a variable
+    """
+
+    discrete_data = np.zeros_like(spike_data)
+    spike_data = spike_data.copy()  # deep copy
+    for neurons in range(spike_data.shape[0]):
+
+        A = spike_data[neurons, :]
+        A[A >= n_bins] = n_bins
+
+        discrete_data[neurons, :] = A
+
+    return discrete_data
+
+
+def compute_mutual_information(neural_data, decoding_variable):
+    mi_data = np.zeros((neural_data.shape[0]))
+    for idx in range(len(mi_data)):
+        mi_data[idx] = info.corrected_mutual_information(  # type: ignore
+            source=neural_data[idx, :], target=decoding_variable, unbiased_measure="quadratic"
+        )
+    return mi_data
+
+
+def compute_pid(data, targets, unbiased_measure="quadratic"):
+    
+    sources = generate_source_ids(data.shape[0]))
+    pid_information = np.zeros((len(sources), 4))  # neuronsC2 x 4
+    for idx in tqdm(
+        range(len(sources)), desc="Running for all sources", leave=False
+    ):  # this is the place to introduce parallelization
+        s1 = sources[idx][0]
+        s2 = sources[idx][1]
+        X1 = np.asarray(data[s1, :], dtype=np.int32)
+        X2 = np.asarray(data[s2, :], dtype=np.int32)
+        Y = np.asarray(targets, dtype=np.int32)
+        u1, u2, red, syn = info.corrected_pid(sourcea=X1, sourceb=X2, target=Y, unbiased_measure=unbiased_measure)  # type: ignore
+        pid_information[idx, :] = u1, u2, red, syn
+
+    return pid_information

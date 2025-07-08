@@ -7,7 +7,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import pickle as pkl
 
-from ibl_info.broja_pid import compute_pid, coinformation, compute_pid_unbiased, unbiasedMI, MI
+from ibl_info.measures.broja_pid import compute_pid, coinformation, compute_pid_unbiased, unbiasedMI, MI
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tqdm import tqdm
 import itertools

@@ -1,1 +1,0 @@
-from ibl_info import config  # noqa: F401

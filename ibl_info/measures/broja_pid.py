@@ -1,4 +1,4 @@
-import ibl_info.BROJA_2PID as broja
+import ibl_info.measures.BROJA_2PID as broja
 import numpy as np
 
 
@@ -119,6 +119,7 @@ def compute_pid_unbiased(Y, X1, X2, repeats=1):
         values = pid_array[:, idx]  # 0 is U1, 1 is U2, 2 is SI and 3 is CI
         params[idx, :] = np.polyfit(x_extrap, values, 2)
         pid_unbiased[idx] = params[idx, 2]  # NOTE: divide here when we do more repetations
+        # why did i use 2 here? -> because we want the intercept
 
     return pid_unbiased
 
