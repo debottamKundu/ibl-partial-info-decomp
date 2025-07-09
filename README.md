@@ -1,9 +1,5 @@
 # ibl-partial-info-decomp
 
-<a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
-    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
-</a>
-
 Syngergy and Redundancy during decision making in mice
 
 ## Project Organization
@@ -20,11 +16,9 @@ Syngergy and Redundancy during decision making in mice
 │
 ├── docs               <- A default mkdocs project; see www.mkdocs.org for details
 │
-├── models             <- Trained and serialized models, model predictions, or model summaries
+├── models             <- Trained and serialized models, model predictions, or model summaries (not uploaded)
 │
-├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-│                         the creator's initials, and a short `-` delimited description, e.g.
-│                         `1.0-jqp-initial-data-exploration`.
+├── notebooks          <- Jupyter notebooks. (not uploaded)
 │
 ├── pyproject.toml     <- Project configuration file with package metadata for 
 │                         ibl_info and configuration for tools like black
@@ -40,22 +34,6 @@ Syngergy and Redundancy during decision making in mice
 ├── setup.cfg          <- Configuration file for flake8
 │
 └── ibl_info   <- Source code for use in this project.
-    │
-    ├── __init__.py             <- Makes ibl_info a Python module
-    │
-    ├── config.py               <- Store useful variables and configuration
-    │
-    ├── dataset.py              <- Scripts to download or generate data
-    │
-    ├── features.py             <- Code to create features for modeling
-    │
-    ├── modeling                
-    │   ├── __init__.py 
-    │   ├── predict.py          <- Code to run model inference with trained models          
-    │   └── train.py            <- Code to train models
-    │
-    └── plots.py                <- Code to create visualizations
 ```
-
 --------
 

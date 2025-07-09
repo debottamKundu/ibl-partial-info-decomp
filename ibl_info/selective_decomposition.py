@@ -125,11 +125,10 @@ def run_selective_decomposition(one, list_of_regions, epoch):
             try:
                 information_pickle = prepare_neural_data(eid, epoch, one, region)
                 region_pickle[eid] = information_pickle
-                eids_done += 1
+                # eids_done += 1
             except Exception as e:
                 print(e)
                 continue
-
         with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
 
