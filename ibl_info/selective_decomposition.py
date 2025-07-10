@@ -115,6 +115,31 @@ def filter_eids(unit_df, region):
     return eids
 
 
+def trials_used(session_id, epoch, one, region):
+
+    # i only want one region normally
+    # or maybe we check how many regions this animal has
+    # that makes sense
+    window = get_window(epoch)
+    print(window)
+
+    trials, mask = load_trials_and_mask(
+        one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    )
+    trials = trials[mask]
+
+    # for now we are looking at just (stimulus interval)
+    # we know the order
+    labels = ["all", "congruent", "incongruent", "middling_incongruent"]
+    intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
+
+    trials_used = np.zeros((4))
+    for idx in range(len(intervals)):
+        trials_used[idx] = decoding_variables[idx].shape[0]
+
+    return trials_used
+
+
 def run_selective_decomposition(one, list_of_regions, epoch):
 
     unit_df = bwm_units(one)
@@ -137,10 +162,32 @@ def run_selective_decomposition(one, list_of_regions, epoch):
             pkl.dump(region_pickle, f)
 
 
-# refactoring so that i can run this in parallel
-def process_region_task(unit_df, region, epoch):
+def process_trials_used(region, epoch):
 
     one = ONE()
+    unit_df = bwm_units(one)
+    selective_eids = filter_eids(unit_df, region)
+    region_pickle = {}
+    for eid in tqdm(selective_eids):
+        try:
+            trials_used = trials_used(eid, epoch, one, region)
+            region_pickle[eid] = trials_used
+        except Exception as e:
+            print(e)
+            continue
+
+    with open(f"./data/generated/trials_used_{region}_{epoch}.pkl", "wb") as f:
+        pkl.dump(region_pickle, f)
+
+    print(f"Worker {os.getpid()} finished {region}")
+    return region
+
+
+# refactoring so that i can run this in parallel
+def process_region_task(region, epoch):
+
+    one = ONE()
+    unit_df = bwm_units(one)
     selective_eids = filter_eids(unit_df, region)
     region_pickle = {}
     for eid in tqdm(selective_eids):
@@ -160,18 +207,33 @@ def process_region_task(unit_df, region, epoch):
 
 def run_selective_decomposition_parallel(list_of_regions, epoch):
 
-    one = ONE()
-    unit_df = bwm_units(one)
     max_regions = len(list_of_regions)
     partial_process_region = functools.partial(
         process_region_task,
-        unit_df=unit_df,
         epoch=epoch,
     )
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_regions) as executor:
 
         results_iterator = executor.map(partial_process_region, list_of_regions)
+
+        for result in tqdm(
+            results_iterator, total=len(list_of_regions), desc="Processing Regions"
+        ):
+            print(result)
+
+
+def run_selective_trial_collation(list_of_regions, epoch):
+
+    max_regions = len(list_of_regions)
+    partial_process_trials = functools.partial(
+        process_trials_used,
+        epoch=epoch,
+    )
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_regions) as executor:
+
+        results_iterator = executor.map(partial_process_trials, list_of_regions)
 
         for result in tqdm(
             results_iterator, total=len(list_of_regions), desc="Processing Regions"
@@ -212,4 +274,11 @@ if __name__ == "__main__":
     # one = ONE()
     # run_selective_decomposition(one, important_regions, "stim")
 
-    run_selective_decomposition_parallel(important_regions, "stim")
+    # run_selective_decomposition_parallel(important_regions, "stim")
+    run_selective_trial_collation(important_regions, "stim")
+
+    # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
+    random_regions = ["SCs", "VISa", "PO"]
+
+    run_selective_decomposition_parallel(random_regions, "stim")
+    run_selective_trial_collation(random_regions, "stim")
