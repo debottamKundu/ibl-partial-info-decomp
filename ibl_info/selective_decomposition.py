@@ -155,6 +155,7 @@ def process_region_task(unit_df, region, epoch):
         pkl.dump(region_pickle, f)
 
     print(f"Worker {os.getpid()} finished {region}")
+    return region
 
 
 def run_selective_decomposition_parallel(list_of_regions, epoch):
@@ -172,7 +173,10 @@ def run_selective_decomposition_parallel(list_of_regions, epoch):
 
         results_iterator = executor.map(partial_process_region, list_of_regions)
 
-    print("----------DONE-------")
+        for result in tqdm(
+            results_iterator, total=len(list_of_regions), desc="Processing Regions"
+        ):
+            print(result)
 
 
 if __name__ == "__main__":
