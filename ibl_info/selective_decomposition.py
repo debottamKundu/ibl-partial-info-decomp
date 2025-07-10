@@ -29,6 +29,9 @@ from ibl_info.prepare_data_pid import (
     cleaned_regions_single_region,
 )
 from ibl_info.utility import alternate_discretize, compute_mutual_information, compute_pid
+import os
+import concurrent.futures
+import functools
 
 
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
@@ -51,7 +54,8 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
     )
 
     # use the alternate binning
-    discretized_spikes = alternate_discretize(cleaned_binned_spikes)  # only 5 bins
+    # NOTE: reduced binning here
+    discretized_spikes = alternate_discretize(cleaned_binned_spikes, n_bins=2)  # only 5 bins
 
     mutual_information = compute_mutual_information(discretized_spikes, target_variable)
     pid = compute_pid(data=discretized_spikes, targets=target_variable)
@@ -133,6 +137,44 @@ def run_selective_decomposition(one, list_of_regions, epoch):
             pkl.dump(region_pickle, f)
 
 
+# refactoring so that i can run this in parallel
+def process_region_task(unit_df, region, epoch):
+
+    one = ONE()
+    selective_eids = filter_eids(unit_df, region)
+    region_pickle = {}
+    for eid in tqdm(selective_eids):
+        try:
+            information_pickle = prepare_neural_data(eid, epoch, one, region)
+            region_pickle[eid] = information_pickle
+        except Exception as e:
+            print(e)
+            continue
+
+    with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
+        pkl.dump(region_pickle, f)
+
+    print(f"Worker {os.getpid()} finished {region}")
+
+
+def run_selective_decomposition_parallel(list_of_regions, epoch):
+
+    one = ONE()
+    unit_df = bwm_units(one)
+    max_regions = len(list_of_regions)
+    partial_process_region = functools.partial(
+        process_region_task,
+        unit_df=unit_df,
+        epoch=epoch,
+    )
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_regions) as executor:
+
+        results_iterator = executor.map(partial_process_region, list_of_regions)
+
+    print("----------DONE-------")
+
+
 if __name__ == "__main__":
 
     important_regions = [
@@ -163,5 +205,7 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    one = ONE()
-    run_selective_decomposition(one, important_regions, "stim")
+    # one = ONE()
+    # run_selective_decomposition(one, important_regions, "stim")
+
+    run_selective_decomposition_parallel(important_regions, "stim")
