@@ -28,7 +28,12 @@ from ibl_info.prepare_data_pid import (
     get_congruent_incongruent_intervals,
     cleaned_regions_single_region,
 )
-from ibl_info.utility import alternate_discretize, compute_mutual_information, compute_pid
+from ibl_info.utility import (
+    alternate_discretize,
+    compute_mutual_information,
+    compute_pid,
+    compute_trivariate_mi,
+)
 import os
 import concurrent.futures
 import functools
@@ -59,8 +64,9 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
 
     mutual_information = compute_mutual_information(discretized_spikes, target_variable)
     pid = compute_pid(data=discretized_spikes, targets=target_variable)
+    trivariate = compute_trivariate_mi(data=discretized_spikes, targets=target_variable)
 
-    return mutual_information, pid
+    return mutual_information, pid, trivariate
 
 
 def prepare_neural_data(session_id, epoch, one, region):
@@ -97,13 +103,14 @@ def prepare_neural_data(session_id, epoch, one, region):
         interval = intervals[idx]
         decoding_variable = decoding_variables[idx]
         print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
-        mutual_information, pid = run_analysis_single_condition(
+        mutual_information, pid, trivariate = run_analysis_single_condition(
             spikes, clusters, interval, region, decoding_variable
         )
 
         information_pickle[labels[idx]] = {
             "mutual_information": mutual_information,
             "pid": pid,
+            "tvmi": trivariate,
         }
 
     return information_pickle

@@ -234,3 +234,21 @@ def compute_pid(data, targets, unbiased_measure="quadratic"):
         pid_information[idx, :] = u1, u2, red, syn
 
     return pid_information
+
+
+def compute_trivariate_mi(data, targets):
+
+    sources = generate_source_ids(data.shape[0])
+    trivariate_information = np.zeros((len(sources), 1))  # neuronsC2 x 4
+    for idx in tqdm(
+        range(len(sources)), desc="Running for all sources", leave=False
+    ):  # this is the place to introduce parallelization
+        s1 = sources[idx][0]
+        s2 = sources[idx][1]
+        X1 = np.asarray(data[s1, :], dtype=np.int32)
+        X2 = np.asarray(data[s2, :], dtype=np.int32)
+        Y = np.asarray(targets, dtype=np.int32)
+
+        trivariate_information[idx] = info.corrected_tvmi(source_a=X1, source_b=X2, target=Y)  # type: ignore
+
+    return trivariate_information

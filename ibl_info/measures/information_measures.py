@@ -66,7 +66,7 @@ def transfer_entropy(source, target, lag):
 
 def pid_plugin(source_a, source_b, target):
 
-    pdf = compute_probability_distribution(source_a, source_b, target)
+    pdf = compute_probability_distribution(target, source_a, source_b)
 
     information_decomposition = broja.pid(pdf, output=0)
 
@@ -223,3 +223,60 @@ def corrected_pid(sourcea, sourceb, target, unbiased_measure="plugin"):
         return pid_unbiased(sourcea, sourceb, target, fit="linear")
     elif unbiased_measure == "quadratic":
         return pid_unbiased(sourcea, sourceb, target, fit="quadratic")
+
+
+def trivariate_plugin(source_a, source_b, target):
+
+    pdf = compute_probability_distribution(target, source_a, source_b)
+    trivariate_mi = broja.I_YZ(pdf)
+
+    return trivariate_mi
+
+
+def correct_trivariate_mi(source_a, source_b, target, repeats=1):
+
+    n_trials = len(target)
+    n_partitions = np.asarray([1, 2, 4])
+    mi_array = np.zeros((len(n_partitions)))
+    mi_unbiased = 0
+    # for complete data, i/e, Iplugin
+    mi_array[0] = trivariate_plugin(source_a, source_b, target)
+
+    for rxs in range(0, repeats):
+        # just one repetation if repeats = 1
+
+        for idx in range(1, len(n_partitions)):
+            splits = n_partitions[idx]
+            # split data splits the data into equal number of splits
+            y_part, x1_part, x2_part = split_data(  # type: ignore
+                target=target, sourcea=source_a, sourceb=source_b, splits=splits
+            )
+            for parts in range(0, splits):
+                y_temp = y_part[parts]
+                x1_temp = x1_part[parts]
+                x2_temp = x2_part[parts]
+
+                # now what
+                mi_temp = trivariate_plugin(x1_temp, x2_temp, y_temp)
+                if splits == 2:
+                    mi_array[idx] = mi_array[idx] + mi_temp / 2
+                elif splits == 4:
+                    mi_array[idx] = mi_array[idx] + mi_temp / 4
+
+    x_extrap = n_partitions / n_trials
+
+    # for each column of mi_array, fit an equation:
+    params = np.zeros((3))  # since QE
+    # we look at only intercept terms
+    params = np.polyfit(x_extrap, mi_array, 2)
+    mi_unbiased = params[2] / repeats
+
+    return mi_unbiased
+
+
+def corrected_tvmi(source_a, source_b, target, unbiased_measure="plugin"):
+
+    if unbiased_measure == "plugin":
+        return trivariate_plugin(source_a, source_b, target)
+    elif unbiased_measure == "quadratic":
+        return correct_trivariate_mi(source_a, source_b, target)
