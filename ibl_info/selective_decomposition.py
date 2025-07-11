@@ -50,17 +50,18 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
     # check if anything is ever returned
     if len(binned_spikes) == 0:
         # return empty arrays
-        return np.asarray([]), np.asarray([])
+        return np.asarray([]), np.asarray([]), np.asarray([])
 
     spike_data = binned_spikes[0].T
     # clean this up ; throw away non-responsive neurons
+    # play with threshold
     cleaned_binned_spikes = cleaned_regions_single_region(
-        spike_data, percent_of_no_spikes_threshold=0.3
+        spike_data, percent_of_no_spikes_threshold=0.4
     )
 
     # use the alternate binning
     # NOTE: reduced binning here
-    discretized_spikes = alternate_discretize(cleaned_binned_spikes, n_bins=2)  # only 5 bins
+    discretized_spikes = alternate_discretize(cleaned_binned_spikes, n_bins=3)  # only 3
 
     mutual_information = compute_mutual_information(discretized_spikes, target_variable)
     pid = compute_pid(data=discretized_spikes, targets=target_variable)
@@ -140,11 +141,11 @@ def trials_used(session_id, epoch, one, region):
     labels = ["all", "congruent", "incongruent", "middling_incongruent"]
     intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
 
-    trials_used = np.zeros((4))
+    trial_count = np.zeros((4))
     for idx in range(len(intervals)):
-        trials_used[idx] = decoding_variables[idx].shape[0]
+        trial_count[idx] = decoding_variables[idx].shape[0]
 
-    return trials_used
+    return trial_count
 
 
 def run_selective_decomposition(one, list_of_regions, epoch):
@@ -177,8 +178,8 @@ def process_trials_used(region, epoch):
     region_pickle = {}
     for eid in tqdm(selective_eids):
         try:
-            trials_used = trials_used(eid, epoch, one, region)
-            region_pickle[eid] = trials_used
+            trial_count = trials_used(eid, epoch, one, region)
+            region_pickle[eid] = trial_count
         except Exception as e:
             print(e)
             continue
@@ -242,9 +243,7 @@ def run_selective_trial_collation(list_of_regions, epoch):
 
         results_iterator = executor.map(partial_process_trials, list_of_regions)
 
-        for result in tqdm(
-            results_iterator, total=len(list_of_regions), desc="Processing Regions"
-        ):
+        for result in tqdm(results_iterator, total=len(list_of_regions), desc="Processing Trials"):
             print(result)
 
 
@@ -281,11 +280,11 @@ if __name__ == "__main__":
     # one = ONE()
     # run_selective_decomposition(one, important_regions, "stim")
 
-    # run_selective_decomposition_parallel(important_regions, "stim")
-    run_selective_trial_collation(important_regions, "stim")
+    run_selective_decomposition_parallel(important_regions, "stim")
+    # run_selective_trial_collation(important_regions, "stim")
 
     # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
     random_regions = ["SCs", "VISa", "PO"]
 
     run_selective_decomposition_parallel(random_regions, "stim")
-    run_selective_trial_collation(random_regions, "stim")
+    # run_selective_trial_collation(random_regions, "stim")

@@ -205,7 +205,7 @@ def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=1):
     return pid_unbiased
 
 
-def corrected_mutual_information(source, target, unbiased_measure="plugin"):
+def corrected_mutual_information(source, target, unbiased_measure="quadratic"):
 
     if unbiased_measure == "plugin":
         return mi_plugin(source, target)
@@ -215,7 +215,7 @@ def corrected_mutual_information(source, target, unbiased_measure="plugin"):
         return mi_unbiased(source, target, fit="quadratic")
 
 
-def corrected_pid(sourcea, sourceb, target, unbiased_measure="plugin"):
+def corrected_pid(sourcea, sourceb, target, unbiased_measure="quadratic"):
 
     if unbiased_measure == "plugin":
         return pid_plugin(sourcea, sourceb, target)
@@ -274,7 +274,7 @@ def correct_trivariate_mi(source_a, source_b, target, repeats=1):
     return mi_unbiased
 
 
-def corrected_tvmi(source_a, source_b, target, unbiased_measure="plugin"):
+def corrected_tvmi(source_a, source_b, target, unbiased_measure="quadratic"):
 
     if unbiased_measure == "plugin":
         return trivariate_plugin(source_a, source_b, target)
