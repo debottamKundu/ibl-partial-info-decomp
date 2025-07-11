@@ -499,13 +499,13 @@ def get_congruent_incongruent_intervals(trials_df, decoding_interval):
         [stimon_times_middling + time_window[0], stimon_times_middling + time_window[1]]  # type: ignore
     ).T
 
+    # NOTE: removed the middling ones
     return (
-        [intervals_all, intervals_congruent, intervals_incongruent, intervals_middling],
+        [intervals_all, intervals_congruent, intervals_incongruent],
         [
             decoding_variable_all,
             decoding_variable_congruent,
             decoding_variable_incongruent,
-            decoding_variable_middling,
         ],
     )
 

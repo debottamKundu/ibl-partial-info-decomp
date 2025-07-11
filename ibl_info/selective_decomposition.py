@@ -37,6 +37,7 @@ from ibl_info.utility import (
 import os
 import concurrent.futures
 import functools
+import random
 
 
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
@@ -95,8 +96,16 @@ def prepare_neural_data(session_id, epoch, one, region):
 
     # for now we are looking at just (stimulus interval)
     # we know the order
-    labels = ["all", "congruent", "incongruent", "middling_incongruent"]
+    labels = ["all", "congruent", "incongruent"]
+
     intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
+
+    # also all trials computed here:
+    # makes things cleaner
+
+    trial_count = np.zeros((3))
+    for idx in range(len(intervals)):
+        trial_count[idx] = decoding_variables[idx].shape[0]
 
     information_pickle = {}
 
@@ -112,22 +121,29 @@ def prepare_neural_data(session_id, epoch, one, region):
             "mutual_information": mutual_information,
             "pid": pid,
             "tvmi": trivariate,
+            "trials": trial_count[idx],
         }
 
     return information_pickle
 
 
-def filter_eids(unit_df, region):
-    unit_df_region = unit_df[unit_df["Beryl"] == region]
-    eids = np.unique(unit_df_region["eid"])
-    return eids
+def run_subsampled_congruent(session_id, epoch, one, region):
 
+    # this is just same code to load things up:
 
-def trials_used(session_id, epoch, one, region):
+    pids, probes = one.eid2pid(session_id)
+    if isinstance(probes, list) and len(probes) > 1:
+        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
+        spikes, clusters = merge_probes(
+            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
+        )
+    else:
+        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
 
     # i only want one region normally
     # or maybe we check how many regions this animal has
     # that makes sense
+
     window = get_window(epoch)
     print(window)
 
@@ -138,14 +154,71 @@ def trials_used(session_id, epoch, one, region):
 
     # for now we are looking at just (stimulus interval)
     # we know the order
-    labels = ["all", "congruent", "incongruent", "middling_incongruent"]
+    labels = ["all", "congruent", "incongruent"]
+
     intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
 
-    trial_count = np.zeros((4))
-    for idx in range(len(intervals)):
-        trial_count[idx] = decoding_variables[idx].shape[0]
+    # incongruent is id 2
+    incongruent_decoding = decoding_variables[2]
+    left_incongruent = np.sum(incongruent_decoding[incongruent_decoding == 1]) / len(
+        incongruent_decoding
+    )
 
-    return trial_count
+    congruent_decoding = decoding_variables[1]
+    target_subsample = len(
+        incongruent_decoding
+    )  # because we want to have exactly the same number of trials
+
+    left_subsample = round(target_subsample * left_incongruent)
+    right_subsample = target_subsample - left_subsample
+
+    indices_congruent_left = np.where(congruent_decoding == 0)[0]
+    indices_congruent_right = np.where(congruent_decoding == 1)[0]
+
+    if len(indices_congruent_left) < left_subsample:
+        print(
+            f"Warning: Not enough '0' (left) congruent trials ({len(indices_congruent_left)}) to meet target ({left_subsample}). Subsampling all available '0' trials."
+        )
+        selected_indices_0 = list(indices_congruent_left)
+    else:
+        selected_indices_0 = random.sample(list(indices_congruent_left), left_subsample)
+
+    if len(indices_congruent_right) < right_subsample:
+        print(
+            f"Warning: Not enough '1' (right) congruent trials ({len(indices_congruent_right)}) to meet target ({right_subsample}). Subsampling all available '1' trials."
+        )
+        selected_indices_1 = list(indices_congruent_right)
+    else:
+        selected_indices_1 = random.sample(list(indices_congruent_right), right_subsample)
+
+    final_subsampled_indices = np.concatenate((selected_indices_0, selected_indices_1))
+
+    print(f"Total selected indices for subsampling: {len(final_subsampled_indices)}\n")
+
+    subsampled_decoding = congruent_decoding[final_subsampled_indices]
+    congruent_intervals = intervals[1][final_subsampled_indices]
+
+    trials = len(subsampled_decoding)
+
+    print(f"Running analysis for {epoch} - {region} - subsampled")
+    mutual_information, pid, trivariate = run_analysis_single_condition(
+        spikes, clusters, congruent_intervals, region, subsampled_decoding
+    )
+
+    information_pickle = {
+        "mutual_information": mutual_information,
+        "pid": pid,
+        "tvmi": trivariate,
+        "trials": trials,
+    }
+
+    return information_pickle
+
+
+def filter_eids(unit_df, region):
+    unit_df_region = unit_df[unit_df["Beryl"] == region]
+    eids = np.unique(unit_df_region["eid"])
+    return eids
 
 
 def run_selective_decomposition(one, list_of_regions, epoch):
@@ -168,27 +241,6 @@ def run_selective_decomposition(one, list_of_regions, epoch):
                 continue
         with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
-
-
-def process_trials_used(region, epoch):
-
-    one = ONE()
-    unit_df = bwm_units(one)
-    selective_eids = filter_eids(unit_df, region)
-    region_pickle = {}
-    for eid in tqdm(selective_eids):
-        try:
-            trial_count = trials_used(eid, epoch, one, region)
-            region_pickle[eid] = trial_count
-        except Exception as e:
-            print(e)
-            continue
-
-    with open(f"./data/generated/trials_used_{region}_{epoch}.pkl", "wb") as f:
-        pkl.dump(region_pickle, f)
-
-    print(f"Worker {os.getpid()} finished {region}")
-    return region
 
 
 # refactoring so that i can run this in parallel
@@ -231,22 +283,6 @@ def run_selective_decomposition_parallel(list_of_regions, epoch):
             print(result)
 
 
-def run_selective_trial_collation(list_of_regions, epoch):
-
-    max_regions = len(list_of_regions)
-    partial_process_trials = functools.partial(
-        process_trials_used,
-        epoch=epoch,
-    )
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_regions) as executor:
-
-        results_iterator = executor.map(partial_process_trials, list_of_regions)
-
-        for result in tqdm(results_iterator, total=len(list_of_regions), desc="Processing Trials"):
-            print(result)
-
-
 if __name__ == "__main__":
 
     important_regions = [
@@ -281,10 +317,7 @@ if __name__ == "__main__":
     # run_selective_decomposition(one, important_regions, "stim")
 
     run_selective_decomposition_parallel(important_regions, "stim")
-    # run_selective_trial_collation(important_regions, "stim")
 
     # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
     random_regions = ["SCs", "VISa", "PO"]
-
     run_selective_decomposition_parallel(random_regions, "stim")
-    # run_selective_trial_collation(random_regions, "stim")
