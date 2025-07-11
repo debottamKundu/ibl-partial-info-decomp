@@ -198,7 +198,7 @@ def alternate_discretize(spike_data, n_bins=3):
     """
 
     n_bins = n_bins - 1  # to account for 0
-    # now 0:0, 1:1, >=2:2
+    # if 3, now 0:0, 1:1, >=2:2
     discrete_data = np.zeros_like(spike_data)
     spike_data = spike_data.copy()  # deep copy
     for neurons in range(spike_data.shape[0]):

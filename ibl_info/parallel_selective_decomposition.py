@@ -52,18 +52,17 @@ from ibl_info.selective_decomposition import (
 
 
 def prepare_and_run_data(task_tuple):
-    # NOTE: add the subsampled-congruent task here as well
-    eid, region, epoch = task_tuple
-    one = ONE()
+
+    eid, region, epoch, one = task_tuple
     try:
         # ideally information pickle, but i want to subsample mutliple times
-        # information_pickle = prepare_neural_data(eid, epoch, one, region)
-        information_pickle = {}
-        for idx in range(5):
+        information_pickle = prepare_neural_data(eid, epoch, one, region)
+        subsampled_pickle = {}
+        for idx in range(6):
             congruent_subsampled_pickle = run_subsampled_congruent(eid, epoch, one, region)
-            information_pickle[idx] = congruent_subsampled_pickle  # bit larger but whatever
+            subsampled_pickle[idx] = congruent_subsampled_pickle  # bit larger but whatever
         # originally
-        # information_pickle['subsampled'] = corrected_subsampled_pickle
+        information_pickle["subsampled"] = subsampled_pickle
         return region, eid, information_pickle
     except Exception as e:
         print(f"Error regarding {eid} in region {region}: {e}")
@@ -78,12 +77,12 @@ def run_flattened(list_of_regions, epoch):
     for region in list_of_regions:
         selective_eids = filter_eids(unit_df, region)
         for eid in tqdm(selective_eids):
-            all_tasks_to_run.append((eid, region, epoch))
+            all_tasks_to_run.append((eid, region, epoch, one))
 
     print(f"Total tasks: {len(all_tasks_to_run)}")
 
     processed_results = []
-    workers = os.cpu_count() - 4 if os.cpu_count() is not None else 1
+    workers = os.cpu_count() // 4
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
         results_iterator = executor.map(prepare_and_run_data, all_tasks_to_run)
 

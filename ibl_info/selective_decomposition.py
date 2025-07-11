@@ -39,6 +39,9 @@ import concurrent.futures
 import functools
 import random
 
+# define const
+PERCENT_OF_SPIKE_THRESHOLD = 0.4
+
 
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
 
@@ -57,12 +60,14 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
     # clean this up ; throw away non-responsive neurons
     # play with threshold
     cleaned_binned_spikes = cleaned_regions_single_region(
-        spike_data, percent_of_no_spikes_threshold=0.4
+        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
     )
 
     # use the alternate binning
     # NOTE: reduced binning here
-    discretized_spikes = alternate_discretize(cleaned_binned_spikes, n_bins=3)  # only 3
+    discretized_spikes = alternate_discretize(
+        cleaned_binned_spikes, n_bins=2
+    )  # so either spike or no spike.
 
     mutual_information = compute_mutual_information(discretized_spikes, target_variable)
     pid = compute_pid(data=discretized_spikes, targets=target_variable)
