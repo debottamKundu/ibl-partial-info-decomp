@@ -48,12 +48,27 @@ from ibl_info.selective_decomposition import (
     prepare_neural_data,
     filter_eids,
     run_subsampled_congruent,
+    get_neurons_used,
 )
+
+
+def prep_count_data(task_tuple):
+
+    eid, region, epoch = task_tuple
+    one = ONE()
+    try:
+        # ideally information pickle, but i want to subsample mutliple times
+        information_pickle = get_neurons_used(eid, epoch, one, region)
+        return region, eid, information_pickle
+    except Exception as e:
+        print(f"Error regarding {eid} in region {region}: {e}")
+        return region, eid, None
 
 
 def prepare_and_run_data(task_tuple):
 
-    eid, region, epoch, one = task_tuple
+    eid, region, epoch = task_tuple
+    one = ONE()
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = prepare_neural_data(eid, epoch, one, region)
@@ -77,14 +92,14 @@ def run_flattened(list_of_regions, epoch):
     for region in list_of_regions:
         selective_eids = filter_eids(unit_df, region)
         for eid in tqdm(selective_eids):
-            all_tasks_to_run.append((eid, region, epoch, one))
+            all_tasks_to_run.append((eid, region, epoch))
 
     print(f"Total tasks: {len(all_tasks_to_run)}")
 
     processed_results = []
     workers = os.cpu_count() // 4
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-        results_iterator = executor.map(prepare_and_run_data, all_tasks_to_run)
+        results_iterator = executor.map(prep_count_data, all_tasks_to_run)
 
         processed_results = list(
             tqdm(results_iterator, total=len(all_tasks_to_run), desc="Processing Tasks")
@@ -106,7 +121,9 @@ def run_flattened(list_of_regions, epoch):
 
     # now we can iterate through items and save
     for region, region_pickle in region_data.items():
-        with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
+        with open(
+            f"./data/generated/selective_decomposition_{region}_{epoch}_datacount.pkl", "wb"
+        ) as f:
             pkl.dump(region_pickle, f)
 
     print("Done!")

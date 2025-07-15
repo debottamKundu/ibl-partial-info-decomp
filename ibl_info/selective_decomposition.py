@@ -43,6 +43,29 @@ import random
 PERCENT_OF_SPIKE_THRESHOLD = 0.4
 
 
+def get_neurons_used(spikes, clusters, intervals, region):
+
+    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
+        spikes, clusters, intervals, [region], minimum_units=10
+    )  # this returns all neurons from a single region that pass qc
+    # however, it is in trials x neurons
+    # i flip it
+
+    # check if anything is ever returned
+    if len(binned_spikes) == 0:
+        # return empty arrays
+        return 0
+
+    spike_data = binned_spikes[0].T
+    # clean this up ; throw away non-responsive neurons
+    # play with threshold
+    cleaned_binned_spikes = cleaned_regions_single_region(
+        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
+    )
+
+    return cleaned_binned_spikes.shape[0]
+
+
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
