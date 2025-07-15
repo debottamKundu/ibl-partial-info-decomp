@@ -43,7 +43,7 @@ import random
 PERCENT_OF_SPIKE_THRESHOLD = 0.4
 
 
-def get_neurons_used(spikes, clusters, intervals, region):
+def count_neurons(spikes, clusters, intervals, region):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=10
@@ -64,6 +64,46 @@ def get_neurons_used(spikes, clusters, intervals, region):
     )
 
     return cleaned_binned_spikes.shape[0]
+
+
+def get_neurons_used(session_id, epoch, one, region):
+    pids, probes = one.eid2pid(session_id)
+    if isinstance(probes, list) and len(probes) > 1:
+        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
+        spikes, clusters = merge_probes(
+            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
+        )
+    else:
+        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
+
+    # i only want one region normally
+    # or maybe we check how many regions this animal has
+    # that makes sense
+
+    window = get_window(epoch)
+    # print(window)
+
+    trials, mask = load_trials_and_mask(
+        one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    )
+    trials = trials[mask]
+
+    # for now we are looking at just (stimulus interval)
+    # we know the order
+    labels = ["all", "congruent", "incongruent"]
+
+    intervals, _ = get_congruent_incongruent_intervals(trials, epoch)
+
+    count_pickle = {}
+
+    for idx in range(len(intervals)):
+        interval = intervals[idx]
+        print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
+        nneurons = count_neurons(spikes, clusters, interval, region)
+
+        count_pickle[labels[idx]] = nneurons
+
+    return count_pickle
 
 
 def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
