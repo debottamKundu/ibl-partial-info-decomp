@@ -510,6 +510,16 @@ def get_congruent_incongruent_intervals(trials_df, decoding_interval):
     )
 
 
+def cleaned_regions_flags(
+    region_data, percent_of_no_spikes_threshold=0.2, firing_rate_threshold=0
+):
+    array_no_nans = region_data[~np.isnan(region_data).any(axis=1)]
+    array_no_zeros = array_no_nans[~np.all(array_no_nans == 0, axis=1)]
+    num_zeros = np.sum(array_no_zeros == 0, axis=1) / array_no_zeros.shape[1]
+    keep_neurons = num_zeros <= 1 - percent_of_no_spikes_threshold
+    return keep_neurons
+
+
 def cleaned_regions_single_region(
     region_data, percent_of_no_spikes_threshold=0.2, firing_rate_threshold=0, plot=False
 ):

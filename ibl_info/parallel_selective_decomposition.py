@@ -99,7 +99,7 @@ def run_flattened(list_of_regions, epoch):
     processed_results = []
     workers = os.cpu_count() // 4
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-        results_iterator = executor.map(prep_count_data, all_tasks_to_run)
+        results_iterator = executor.map(prepare_and_run_data, all_tasks_to_run)
 
         processed_results = list(
             tqdm(results_iterator, total=len(all_tasks_to_run), desc="Processing Tasks")

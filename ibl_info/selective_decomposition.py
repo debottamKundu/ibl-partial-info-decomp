@@ -23,6 +23,7 @@ from pathlib import Path
 import warnings
 from sklearn.ensemble import RandomForestClassifier
 from ibl_info.prepare_data_pid import (
+    cleaned_regions_flags,
     get_window,
     prepare_ephys_data,
     get_congruent_incongruent_intervals,
@@ -106,7 +107,30 @@ def get_neurons_used(session_id, epoch, one, region):
     return count_pickle
 
 
-def run_analysis_single_condition(spikes, clusters, intervals, region, target_variable):
+def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
+
+    # NOTE: maybe we can change the number of minimum units
+    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
+        spikes, clusters, intervals, [region], minimum_units=10
+    )
+
+    if len(binned_spikes) == 0:
+        # return empty arrays
+        return False  # no neurons viable
+
+    spike_data = binned_spikes[0].T
+    # clean this up ; throw away non-responsive neurons
+    # play with threshold
+    cleaned_neurons = cleaned_regions_flags(
+        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
+    )
+
+    return cleaned_neurons
+
+
+def run_analysis_single_condition(
+    spikes, clusters, intervals, region, target_variable, cleaned_neuron_ids=None
+):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=10
@@ -122,9 +146,16 @@ def run_analysis_single_condition(spikes, clusters, intervals, region, target_va
     spike_data = binned_spikes[0].T
     # clean this up ; throw away non-responsive neurons
     # play with threshold
-    cleaned_binned_spikes = cleaned_regions_single_region(
-        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
-    )
+    # we pass this in
+    if cleaned_neuron_ids is None:
+        cleaned_binned_spikes = cleaned_regions_single_region(
+            spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
+        )
+    else:
+        if cleaned_neuron_ids == False:
+            return np.asarray([]), np.asarray([]), np.asarray([])
+        else:
+            cleaned_binned_spikes = spike_data[cleaned_neuron_ids, :]
 
     # use the alternate binning
     # NOTE: reduced binning here
@@ -177,12 +208,16 @@ def prepare_neural_data(session_id, epoch, one, region):
 
     information_pickle = {}
 
+    # find the neurons to be used:
+    # for all
+    neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals[0], region)
+
     for idx in range(len(intervals)):
         interval = intervals[idx]
         decoding_variable = decoding_variables[idx]
         print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
         mutual_information, pid, trivariate = run_analysis_single_condition(
-            spikes, clusters, interval, region, decoding_variable
+            spikes, clusters, interval, region, decoding_variable, cleaned_neuron_ids=neuron_flags
         )
 
         information_pickle[labels[idx]] = {
@@ -225,6 +260,11 @@ def run_subsampled_congruent(session_id, epoch, one, region):
     labels = ["all", "congruent", "incongruent"]
 
     intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
+
+    # pick neurons
+    neurons_mask = select_neurons_for_analysis_all(
+        spikes, clusters, intervals[0], region
+    )  # same: use neurons subselected from all.
 
     # incongruent is id 2
     incongruent_decoding = decoding_variables[2]
@@ -270,7 +310,12 @@ def run_subsampled_congruent(session_id, epoch, one, region):
 
     print(f"Running analysis for {epoch} - {region} - subsampled")
     mutual_information, pid, trivariate = run_analysis_single_condition(
-        spikes, clusters, congruent_intervals, region, subsampled_decoding
+        spikes,
+        clusters,
+        congruent_intervals,
+        region,
+        subsampled_decoding,
+        cleaned_neuron_ids=neurons_mask,
     )
 
     information_pickle = {
