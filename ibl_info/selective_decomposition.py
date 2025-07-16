@@ -116,7 +116,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
 
     if len(binned_spikes) == 0:
         # return empty arrays
-        return False  # no neurons viable
+        return [0]  # no neurons viable
 
     spike_data = binned_spikes[0].T
     # clean this up ; throw away non-responsive neurons
@@ -152,7 +152,7 @@ def run_analysis_single_condition(
             spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
         )
     else:
-        if cleaned_neuron_ids == False:
+        if len(cleaned_neuron_ids) == 1:
             return np.asarray([]), np.asarray([]), np.asarray([])
         else:
             cleaned_binned_spikes = spike_data[cleaned_neuron_ids, :]
@@ -398,39 +398,41 @@ def run_selective_decomposition_parallel(list_of_regions, epoch):
 
 if __name__ == "__main__":
 
-    important_regions = [
-        "VISp",
-        "MOs",
-        "SSp-ul",
-        "ACAd",
-        "PL",
-        "CP",
-        "VPM",
-        "MG",
-        "LGd",
-        "ZI",
-        "SNr",
-        "MRN",
-        "SCm",
-        "PAG",
-        "APN",
-        "RN",
-        "PPN",
-        "PRNc",
-        "PRNr",
-        "GRN",
-        "IRN",
-        "PGRN",
-        "CUL4 5",
-        "SIM",
-        "IP",
-    ]
+    important_regions = np.asarray(
+        [
+            "VISp",
+            "MOs",
+            "SSp-ul",
+            "ACAd",
+            "PL",
+            "CP",
+            "VPM",
+            "MG",
+            "LGd",
+            "ZI",
+            "SNr",
+            "MRN",
+            "SCm",
+            "PAG",
+            "APN",
+            "RN",
+            "PPN",
+            "PRNc",
+            "PRNr",
+            "GRN",
+            "IRN",
+            "PGRN",
+            "CUL4 5",
+            "SIM",
+            "IP",
+        ]
+    )
 
-    # one = ONE()
-    # run_selective_decomposition(one, important_regions, "stim")
+    one = ONE()
+    run_selective_decomposition(one, important_regions[0:2], "stim")
 
-    run_selective_decomposition_parallel(important_regions, "stim")
+    # run_selective_decomposition_parallel(important_regions, "stim")
 
-    # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
-    random_regions = ["SCs", "VISa", "PO"]
-    run_selective_decomposition_parallel(random_regions, "stim")
+    # # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
+    # random_regions = ["SCs", "VISa", "PO"]
+    # run_selective_decomposition_parallel(random_regions, "stim")
