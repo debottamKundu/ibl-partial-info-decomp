@@ -6,17 +6,22 @@ import seaborn as sns
 from glob import glob
 
 
-def plot_subsample(ax, data, original_values):
-    eids = list(data.keys())
-    pid_array = []
-    for eid in eids:
-        for repeats in range(0, 5):
-            temp = data[eid][repeats]["pid"]
-            if len(temp) != 0:
-                pid_array.append(temp)
-    pid_array = np.concatenate(pid_array)
+def plot_subsample(ax, data, original_values, pid_array=None):  # very hacky, change this
+
+    colors = ["#a2c4e3", "#ffc080", "#9bcd9b"]  # all, congruent, incongruent
+    if pid_array is None:
+        eids = list(data.keys())
+        pid_array = []
+        for eid in eids:
+            for repeats in range(0, 5):
+                temp = data[eid][repeats]["pid"]
+                if len(temp) != 0:
+                    pid_array.append(temp)
+        pid_array = np.concatenate(pid_array)
+
     pid_means = np.mean(pid_array, axis=0)
     pid_sems = np.std(pid_array, axis=0) / np.sqrt(len(pid_array))
+
     # fig, ax = plt.subplots(figsize=(4, 4), ncols=1)
     ax.bar(
         np.arange(0, 2),
@@ -27,21 +32,21 @@ def plot_subsample(ax, data, original_values):
         capsize=5,
         linestyle="dashed",
         width=0.4,
-        label="subsampled",
+        label="subsampled-congruent",
     )
     ax.bar(
         np.arange(0, 2) + 0.4,
         [original_values[0], original_values[1]],
         yerr=[original_values[2], original_values[3]],
-        color="#ff5580",
+        color="#9bcd9b",
         edgecolor="k",
         capsize=5,
         linestyle="dashed",
         width=0.4,
-        label="original",
+        label="original-incongruent",
     )
     ax.legend()
-    ax.set_xticks(np.arange(0, 2), ["Redundant", "Synergy"])
+    ax.set_xticks(np.arange(0, 2) + 0.2, ["Redundant", "Synergy"])
     ax.set_title(f"Subsampled Congruent Comparison")
     return ax
 
@@ -151,6 +156,7 @@ def plot_information(
     subsample_data=None,
     plt_jt=False,
     normalize_by_joint=False,
+    subsampled_type=0,
 ):
 
     # i think changing this makes more sense
@@ -259,13 +265,17 @@ def plot_information(
 
     ## subsampled stuff
     if (subsample_data is not None) and (not normalize_by_joint):
-        original_congruent_values = [
-            pid_means[1, 2],
-            pid_means[1, 3],
-            pid_sems[1, 2],
-            pid_sems[1, 3],
+        original_incongruent_values = [
+            pid_means[2, 2],
+            pid_means[2, 3],
+            pid_sems[2, 2],
+            pid_sems[2, 3],
         ]
-        plot_subsample(ax[2], subsample_data, original_congruent_values)
+        if subsampled_type == 0:
+            plot_subsample(ax[2], subsample_data, original_incongruent_values)
+        else:
+            plot_subsample(ax[2], None, original_incongruent_values, subsample_data)
+
     info = ""
     if normalize_by_joint:
         info = "norm"
@@ -293,6 +303,8 @@ def plot_each_region(
         congruent_joint,
         incongruent_joint,
     ) = collate_data_for_region(region_data)
+
+    # print(f"{region_name}: {all_pid.shape}, {congruent_pid.shape}, {incongruent_pid.shape}")
 
     # trial_data is a dict with keys eid and then conditions
     # how to plot this
