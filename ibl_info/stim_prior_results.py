@@ -1,12 +1,17 @@
+from typing import Tuple, Union
 import numpy as np
 import pickle as pkl
 from matplotlib import pyplot as plt
 import pandas as pd
 import seaborn as sns
 from glob import glob
+from scipy.stats import wilcoxon
+from matplotlib.container import BarContainer
 
 
-def plot_subsample(ax, data, original_values, pid_array=None):  # very hacky, change this
+def plot_subsample(
+    ax, data, original_values, pid_array=None, significance_markers=None
+):  # very hacky, change this
 
     colors = ["#a2c4e3", "#ffc080", "#9bcd9b"]  # all, congruent, incongruent
     if pid_array is None:
@@ -34,6 +39,8 @@ def plot_subsample(ax, data, original_values, pid_array=None):  # very hacky, ch
         width=0.4,
         label="subsampled-congruent",
     )
+
+    label = "original-incongruent"
     ax.bar(
         np.arange(0, 2) + 0.4,
         [original_values[0], original_values[1]],
@@ -43,11 +50,59 @@ def plot_subsample(ax, data, original_values, pid_array=None):  # very hacky, ch
         capsize=5,
         linestyle="dashed",
         width=0.4,
-        label="original-incongruent",
+        label=label,
     )
     ax.legend()
     ax.set_xticks(np.arange(0, 2) + 0.2, ["Redundant", "Synergy"])
     ax.set_title(f"Subsampled Congruent Comparison")
+
+    if significance_markers is not None:
+        x_base = np.arange(2)
+        bar_width = 0.4
+        for i, x_pos in enumerate(x_base):
+
+            # X-coordinates for the bars being compared
+            x1_bar_pos = x_pos
+            x2_bar_pos = x_pos + bar_width
+
+            # Data for the 'Congruent' bar at current xtick `i`
+            if i == 0:  # This corresponds to the 'unique_info' part
+                mean_bar2 = pid_means[2]
+                sem_bar2 = pid_sems[2]
+            else:  # This corresponds to the pid_means part
+                mean_bar2 = pid_means[3]  # pid_means[1, 2] for i=1, pid_means[1,3] for i=2
+                sem_bar2 = pid_sems[3]
+
+            # Data for the 'Incongruent' bar at current xtick `i`
+            if i == 0:  # This corresponds to the 'unique_info' part
+                mean_bar3 = original_values[0]
+                sem_bar3 = original_values[2]
+            else:  # This corresponds to the pid_means part
+                mean_bar3 = original_values[1]
+                sem_bar3 = original_values[3]
+
+            max_y = max(mean_bar2 + sem_bar2, mean_bar3 + sem_bar3)
+            y_sig_line = max_y + 0.0002  # Adjust this offset as needed
+            y_sig_text = y_sig_line  # Adjust this offset as needed
+
+            marker = significance_markers[i]
+
+            # Plot the significance line
+            if marker != "ns":  # Only plot line if it's significant
+                ax.plot(
+                    [x1_bar_pos, x2_bar_pos], [y_sig_line, y_sig_line], "k-"
+                )  # Horizontal line
+
+            ax.text(
+                (x1_bar_pos + x2_bar_pos) / 2,
+                y_sig_text,
+                marker,
+                ha="center",
+                va="bottom",
+                color="k",
+                fontsize=12,
+            )
+
     return ax
 
 
@@ -140,6 +195,38 @@ def compute_proportions(
     pass
 
 
+def convert_to_markers(unique, red, syn):
+    markers = []
+    if unique < 0.001:
+        markers.append("***")
+    elif unique < 0.01:
+        markers.append("**")
+    elif unique < 0.05:
+        markers.append("*")
+    else:
+        markers.append("n.s.")
+
+    if red < 0.001:
+        markers.append("***")
+    elif red < 0.01:
+        markers.append("**")
+    elif red < 0.05:
+        markers.append("*")
+    else:
+        markers.append("n.s.")
+
+    if syn < 0.001:
+        markers.append("***")
+    elif syn < 0.01:
+        markers.append("**")
+    elif syn < 0.05:
+        markers.append("*")
+    else:
+        markers.append("n.s.")
+
+    return markers
+
+
 def plot_information(
     all_mutual,
     congruent_mutual,
@@ -171,11 +258,26 @@ def plot_information(
     else:
         text_color = "red"
 
+    unique_info_means = np.zeros((3))
+    unique_info_sems = np.zeros((3))
     mutual_info_means, mutual_info_sems = compute_means_and_sems(
         all_mutual, congruent_mutual, incongruent_mutual
     )
     pid_means, pid_sems = compute_means_and_sems(all_pid, congruent_pid, incongruent_pid)
     joint_means, joint_sems = compute_means_and_sems(all_joint, congruent_joint, incongruent_joint)
+
+    # compute significances
+    # red vs red
+    # syn vs syn
+    # unique vs unique
+    # but only congruent and incongruent
+    _, p_red = wilcoxon(congruent_pid[:, 2], incongruent_pid[:, 2])
+    _, p_syn = wilcoxon(congruent_pid[:, 3], incongruent_pid[:, 3])
+    _, p_unique = wilcoxon(
+        np.mean(congruent_pid[:, 0:2], axis=1), np.mean(incongruent_pid[:, 0:2], axis=1)
+    )
+
+    significance_markers = convert_to_markers(p_unique, p_red, p_syn)
 
     # let's not plot the joints for now
     if (subsample_data is not None) and (not normalize_by_joint):
@@ -201,14 +303,26 @@ def plot_information(
         # don't use mutual info means but rather pid_means
         # overriding mutual info means.
         # very ugly
-        mutual_info_means[0] = np.mean(pid_means[0, 0:2])
-        mutual_info_means[1] = np.mean(pid_means[1, 0:2])
-        mutual_info_means[2] = np.mean(pid_means[2, 0:2])
+        unique_info_means[0] = np.mean(pid_means[0, 0:2])
+        unique_info_means[1] = np.mean(pid_means[1, 0:2])
+        unique_info_means[2] = np.mean(pid_means[2, 0:2])
+
+        # bound by 0
+        pid_means = np.maximum(pid_means, 0)
+        unique_info_means = np.maximum(unique_info_means, 0)
+
+    unique_info_means[0] = np.mean(pid_means[0, 0:2])
+    unique_info_means[1] = np.mean(pid_means[1, 0:2])
+    unique_info_means[2] = np.mean(pid_means[2, 0:2])
+
+    unique_info_sems[0] = np.mean(pid_sems[0, 0:2])
+    unique_info_sems[1] = np.mean(pid_sems[1, 0:2])
+    unique_info_sems[2] = np.mean(pid_sems[2, 0:2])
 
     ax[0].bar(
         np.arange(3) - 0.3,
-        [mutual_info_means[0], pid_means[0, 2], pid_means[0, 3]],
-        yerr=[mutual_info_sems[0], pid_sems[0, 2], pid_sems[0, 3]],
+        [unique_info_means[0], pid_means[0, 2], pid_means[0, 3]],
+        yerr=[unique_info_sems[0], pid_sems[0, 2], pid_sems[0, 3]],
         color=colors[0],
         width=0.3,
         capsize=5,
@@ -218,8 +332,8 @@ def plot_information(
     )
     ax[0].bar(
         np.arange(3),
-        [mutual_info_means[1], pid_means[1, 2], pid_means[1, 3]],
-        yerr=[mutual_info_sems[1], pid_sems[1, 2], pid_sems[1, 3]],
+        [unique_info_means[1], pid_means[1, 2], pid_means[1, 3]],
+        yerr=[unique_info_sems[1], pid_sems[1, 2], pid_sems[1, 3]],
         color=colors[1],
         width=0.3,
         capsize=5,
@@ -229,8 +343,8 @@ def plot_information(
     )
     ax[0].bar(
         np.arange(3) + 0.3,
-        [mutual_info_means[2], pid_means[2, 2], pid_means[2, 3]],
-        yerr=[mutual_info_sems[2], pid_sems[2, 2], pid_sems[2, 3]],
+        [unique_info_means[2], pid_means[2, 2], pid_means[2, 3]],
+        yerr=[unique_info_sems[2], pid_sems[2, 2], pid_sems[2, 3]],
         color=colors[2],
         width=0.3,
         capsize=5,
@@ -238,6 +352,68 @@ def plot_information(
         linestyle="dashed",
         label="Incongruent",
     )
+
+    # plot significance markers
+    x_base = np.arange(3)
+    bar_width = 0.3
+    if normalize_by_joint is False:
+        for i, x_pos in enumerate(x_base):
+            # Get the means and sems for the second and third bars of the current group (All, Congruent, Incongruent)
+            # The 'second bar' for group 'i' (0=All, 1=Congruent, 2=Incongruent) is pid_means[i, 2]
+            # The 'third bar' for group 'i' is pid_means[i, 3]
+
+            # X-coordinates for the bars being compared
+            x1_bar_pos = x_pos
+            x2_bar_pos = x_pos + bar_width
+
+            # Data for the 'Congruent' bar at current xtick `i`
+            if i == 0:  # This corresponds to the 'unique_info' part
+                mean_bar2 = unique_info_means[1]
+                sem_bar2 = unique_info_sems[1]
+            else:  # This corresponds to the pid_means part
+                mean_bar2 = pid_means[1, i + 1]  # pid_means[1, 2] for i=1, pid_means[1,3] for i=2
+                sem_bar2 = pid_sems[1, i + 1]
+
+            # Data for the 'Incongruent' bar at current xtick `i`
+            if i == 0:  # This corresponds to the 'unique_info' part
+                mean_bar3 = unique_info_means[2]
+                sem_bar3 = unique_info_sems[2]
+            else:  # This corresponds to the pid_means part
+                mean_bar3 = pid_means[2, i + 1]  # pid_means[2, 2] for i=1, pid_means[2,3] for i=2
+                sem_bar3 = pid_sems[2, i + 1]
+
+            # Determine the height for the significance line and text
+            # It should be above the taller of the two bars being compared (including their error bars)
+            max_y = max(mean_bar2 + sem_bar2, mean_bar3 + sem_bar3)
+            y_sig_line = max_y + 0.001  # Adjust this offset as needed
+            y_sig_text = y_sig_line  # Adjust this offset as needed
+
+            # Get the significance marker for the current comparison
+            marker = significance_markers[i]
+
+            # Plot the significance line
+            if marker != "ns":  # Only plot line if it's significant
+                ax[0].plot(
+                    [x1_bar_pos, x2_bar_pos], [y_sig_line, y_sig_line], "k-"
+                )  # Horizontal line
+                # ax[0].plot(
+            #         [x1_bar_pos, x1_bar_pos], [y_sig_line - 0.0001, y_sig_line], "k-"
+            #     )  # Left vertical line
+            #     ax[0].plot(
+            #         [x2_bar_pos, x2_bar_pos], [y_sig_line - 0.0001, y_sig_line], "k-"
+            #     )  # Right vertical line
+
+            # Plot the significance text (asterisks or 'ns')
+            # Position it in the middle of the two bars
+            ax[0].text(
+                (x1_bar_pos + x2_bar_pos) / 2,
+                y_sig_text,
+                marker,
+                ha="center",
+                va="bottom",
+                color="k",
+                fontsize=12,
+            )
 
     # now for trial data
     sns.barplot(
@@ -272,19 +448,75 @@ def plot_information(
             pid_sems[2, 3],
         ]
         if subsampled_type == 0:
-            plot_subsample(ax[2], subsample_data, original_incongruent_values)
+            # new_markers = compute_significance(subsample_data, incongruent_pid[:, 2:4])
+            plot_subsample(
+                ax[2],
+                subsample_data,
+                original_incongruent_values,
+                pid_array=None,
+                marker=None,
+            )
         else:
-            plot_subsample(ax[2], None, original_incongruent_values, subsample_data)
+            plot_subsample(ax[2], None, original_incongruent_values, subsample_data, marker=None)
 
     info = ""
     if normalize_by_joint:
         info = "norm"
-
     plt.savefig(
         f"../reports/figures/region_pid/{region_name}_{info}.png",
         bbox_inches="tight",
         facecolor="white",
     )
+    # plt.show()
+    plt.close()
+
+
+def compute_significance(region_name, subsample_data, incongruent_pid):
+    eids = list(subsample_data.keys())
+    pid_array = []
+    for eid in eids:
+        temp_collate = []
+        for repeats in range(0, 5):
+            temp = subsample_data[eid][repeats]["pid"]
+            if len(temp) != 0:
+                temp_collate.append(temp)
+        if len(temp_collate) != 0:
+            temp_collate = np.asarray(temp_collate)
+            temp_collate_means = np.mean(temp_collate, axis=0)
+            pid_array.append(temp_collate_means)
+
+    pid_array = np.concatenate(pid_array)
+
+    _, p_red = wilcoxon(pid_array[:, 2], incongruent_pid[:, 2])
+    _, p_syn = wilcoxon(pid_array[:, 3], incongruent_pid[:, 3])
+
+    significance_markers = convert_to_markers(0, p_red, p_syn)
+    significance_markers = np.asarray(significance_markers)
+
+    # these are for plots
+    incongruent_means = np.mean(incongruent_pid, axis=0)
+    incongruent_sems = np.std(incongruent_pid, axis=0) / np.sqrt(incongruent_pid.shape[0])
+    original_incongruent_values = [
+        incongruent_means[2],
+        incongruent_means[3],
+        incongruent_sems[2],
+        incongruent_sems[3],
+    ]
+    fig, ax = plt.subplots(figsize=(6, 4), ncols=1)
+    plot_subsample(
+        ax,
+        data=subsample_data,
+        original_values=original_incongruent_values,
+        significance_markers=significance_markers[1:],
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.savefig(
+        f"../reports/figures/region_pid/{region_name}_subsample.png",
+        bbox_inches="tight",
+        facecolor="white",
+    )
+    # plt.show()
     plt.close()
 
 
