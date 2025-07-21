@@ -312,6 +312,10 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
     for region in regions:
         # find all clusters in region (where region can be a list of regions)
         region_mask = np.isin(beryl_regions, region)
+        # add another mask here to check for single units
+        # i think this makes sense; pass it in
+        # NOTE ::: add it here
+
         if sum(region_mask) < minimum_units:
             print(f"{(region)} below min units threshold ({minimum_units})")
             continue
@@ -339,7 +343,7 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
 def get_window(decoding_interval):
 
     if decoding_interval == "stim":
-        time_window = [0, 0.2]
+        time_window = [0, 0.1]
     elif decoding_interval == "choice":
         time_window = [-0.2, 0]
     elif decoding_interval == "feedback":
@@ -420,10 +424,27 @@ def compute_intervals(trials_df, decoding_interval):
     return intervals, decoding_variable
 
 
+def get_contrast_intervals(trials_df, decoding_interval="stim"):
+
+    time_window = get_window(decoding_interval)
+    contrasts = [1, 0.25, 0.125, 0.0625, 0]
+    contrast_interval = []
+
+    for contrast in contrasts:
+        trials = trials_df[
+            (trials_df.contrastLeft == contrast) | (trials_df.contrastRight == contrast)
+        ]
+        stimon_times = trials.stimOn_times.values
+        intervals = np.array([stimon_times + time_window[0], stimon_times + time_window[1]]).T
+        contrast_interval.append(intervals)
+
+    return contrast_interval
+
+
 def get_congruent_incongruent_intervals(trials_df, decoding_interval):
 
     time_window = get_window(decoding_interval)
-    all_contrasts = [1, 0.5, 0.25, 0.125, 0.0625, 0]
+    all_contrasts = [1, 0.25, 0.125, 0.0625, 0]
     low_contrasts = [0.0625, 0.125, 0.25]  # 0 is essentially random yeah.
 
     # let's assume all is stimulus interval for now
