@@ -254,3 +254,34 @@ def compute_trivariate_mi(data, targets):
         trivariate_information[idx] = info.corrected_tvmi(source_a=X1, source_b=X2, target=Y)  # type: ignore
 
     return trivariate_information
+
+
+# define constants
+
+FIRING_RATE = {
+    np.str_("VISp"): np.float64(1.2),
+    np.str_("MOs"): np.float64(0.9057971014492754),
+    np.str_("SSp-ul"): np.float64(1.1545157621000042),
+    np.str_("ACAd"): np.float64(1.1401425178147269),
+    np.str_("PL"): np.float64(0.5133919464730121),
+    np.str_("CP"): np.float64(0.778816199376947),
+    np.str_("VPM"): np.float64(3.084529679795269),
+    np.str_("MG"): np.float64(2.4375),
+    np.str_("LGd"): np.float64(3.461941533370105),
+    np.str_("ZI"): np.float64(2.7667320801487296),
+    np.str_("SNr"): np.float64(6.982774502579218),
+    np.str_("MRN"): np.float64(2.4242454513972134),
+    np.str_("SCm"): np.float64(1.8298969072164948),
+    np.str_("PAG"): np.float64(1.3695090439276485),
+    np.str_("APN"): np.float64(2.7202380952380953),
+    np.str_("RN"): np.float64(2.197309417040359),
+    np.str_("PPN"): np.float64(0.90007215007215),
+    np.str_("PRNc"): np.float64(1.7209121557497808),
+    np.str_("PRNr"): np.float64(1.2751677852348993),
+    np.str_("GRN"): np.float64(1.9773492500765228),
+    np.str_("IRN"): np.float64(0.9086647160526665),
+    np.str_("PGRN"): np.float64(1.1100909703504043),
+    np.str_("CUL4 5"): np.float64(1.6),
+    np.str_("SIM"): np.float64(2.1323529411764706),
+    np.str_("IP"): np.float64(5.979498861047836),
+}

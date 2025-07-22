@@ -178,7 +178,7 @@ if __name__ == "__main__":
     print("Now collecting and writing out")
 
     region_data = {}
-    for spike_data, region, eid in processed_results:
+    for spike_data, eid, region in processed_results:
 
         if region not in region_data:
             region_data[region] = {}

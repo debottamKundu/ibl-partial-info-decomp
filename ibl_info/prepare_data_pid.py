@@ -532,14 +532,21 @@ def get_congruent_incongruent_intervals(trials_df, decoding_interval):
 
 
 def cleaned_regions_flags(
-    region_data, percent_of_no_spikes_threshold=0.2, firing_rate_threshold=0
+    region_data, percent_of_no_spikes_threshold=0.2, firing_rate_threshold=1.0, window=[0, 0.1]
 ):
     # fix the flag
+    # neurons x trials
 
     nan_flag = np.isnan(region_data).any(axis=1)
-    num_zeros = np.nansum(region_data == 0, axis=1) / region_data.shape[1]
-    keep_neurons = num_zeros <= 1 - percent_of_no_spikes_threshold
-    keep_flag = keep_neurons & ~nan_flag
+    spike_rate = region_data / (window[1] - window[0])
+    mean_spike_rate = np.mean(spike_rate, axis=1)
+    keep_flag = mean_spike_rate >= firing_rate_threshold  # set as 25th percentile of global mean
+
+    # num_zeros = np.nansum(region_data == 0, axis=1) / region_data.shape[1]
+    # keep_neurons = num_zeros <= 1 - percent_of_no_spikes_threshold
+    # keep_flag = keep_neurons & ~nan_flag
+    keep_flag = keep_flag & ~nan_flag
+
     return keep_flag
 
 

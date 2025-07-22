@@ -72,6 +72,8 @@ def prepare_and_run_data(task_tuple):
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = prepare_neural_data(eid, epoch, one, region)
+        if information_pickle == {}:
+            return region, eid, None
         subsampled_pickle = {}
         for idx in range(6):
             congruent_subsampled_pickle = run_subsampled_congruent(eid, epoch, one, region)

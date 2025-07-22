@@ -34,6 +34,7 @@ from ibl_info.utility import (
     compute_mutual_information,
     compute_pid,
     compute_trivariate_mi,
+    FIRING_RATE,
 )
 import os
 import concurrent.futures
@@ -47,7 +48,7 @@ PERCENT_OF_SPIKE_THRESHOLD = 0.4
 def count_neurons(spikes, clusters, intervals, region):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=10
+        spikes, clusters, intervals, [region], minimum_units=5
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
     # i flip it
@@ -111,7 +112,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
 
     # NOTE: maybe we can change the number of minimum units
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=10
+        spikes, clusters, intervals, [region], minimum_units=5
     )
 
     if len(binned_spikes) == 0:
@@ -121,8 +122,11 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
     spike_data = binned_spikes[0].T
     # clean this up ; throw away non-responsive neurons
     # play with threshold
+
+    firing_rate_threshold = FIRING_RATE[region]
     cleaned_neurons = cleaned_regions_flags(
-        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
+        spike_data,
+        firing_rate_threshold=firing_rate_threshold,
     )
 
     return cleaned_neurons
@@ -133,7 +137,7 @@ def run_analysis_single_condition(
 ):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=10
+        spikes, clusters, intervals, [region], minimum_units=5
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
     # i flip it
@@ -148,9 +152,7 @@ def run_analysis_single_condition(
     # play with threshold
     # we pass this in
     if cleaned_neuron_ids is None:
-        cleaned_binned_spikes = cleaned_regions_single_region(
-            spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
-        )
+        cleaned_binned_spikes = cleaned_regions_single_region(spike_data, FIRING_RATE[region])
     else:
         if len(cleaned_neuron_ids) == 1:
             return np.asarray([]), np.asarray([]), np.asarray([])
@@ -212,9 +214,13 @@ def prepare_neural_data(session_id, epoch, one, region):
     # for all
     neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals[0], region)
 
+    if np.sum(neuron_flags) < 2:
+        return information_pickle
+
     for idx in range(len(intervals)):
         interval = intervals[idx]
         decoding_variable = decoding_variables[idx]
+        neurons_used = np.sum(neuron_flags)
         print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
         mutual_information, pid, trivariate = run_analysis_single_condition(
             spikes, clusters, interval, region, decoding_variable, cleaned_neuron_ids=neuron_flags
@@ -225,6 +231,7 @@ def prepare_neural_data(session_id, epoch, one, region):
             "pid": pid,
             "tvmi": trivariate,
             "trials": trial_count[idx],
+            "neurons": neurons_used,
         }
 
     return information_pickle
@@ -342,9 +349,6 @@ def run_selective_decomposition(one, list_of_regions, epoch):
         selective_eids = filter_eids(unit_df, region)
         region_pickle = {}
         for eid in tqdm(selective_eids):
-
-            # if eids_done >= 2:
-            #     break
             try:
                 information_pickle = prepare_neural_data(eid, epoch, one, region)
                 region_pickle[eid] = information_pickle
