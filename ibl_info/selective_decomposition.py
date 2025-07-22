@@ -162,7 +162,7 @@ def run_analysis_single_condition(
     # use the alternate binning
     # NOTE: reduced binning here
     discretized_spikes = alternate_discretize(
-        cleaned_binned_spikes, n_bins=2
+        cleaned_binned_spikes, n_bins=3
     )  # so either spike or no spike.
 
     mutual_information = compute_mutual_information(discretized_spikes, target_variable)

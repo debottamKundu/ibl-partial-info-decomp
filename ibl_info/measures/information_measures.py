@@ -111,7 +111,7 @@ def split_data(target, sourcea, sourceb=None, splits=0):
         return y_partitions, xa_partitions, xb_partitions
 
 
-def mi_unbiased(source, target, fit="quadratic", repeats=1):
+def mi_unbiased(source, target, fit="quadratic", repeats=5):
 
     n_trials = len(target)
     n_partitions = np.asarray([1, 2, 4])
@@ -137,6 +137,11 @@ def mi_unbiased(source, target, fit="quadratic", repeats=1):
                 elif splits == 4:
                     mi_array[idx] = mi_array[idx] + mi_temp / 4
 
+    # i think the division by repeats should happen here
+    # not the first one because we do it only once
+    mi_array[1] = mi_array[1] / repeats
+    mi_array[2] = mi_array[2] / repeats
+
     x_extrap = n_partitions / n_trials
 
     # for each column of mi_array, fit an equation:
@@ -144,15 +149,15 @@ def mi_unbiased(source, target, fit="quadratic", repeats=1):
     # we look at only intercept terms
     if fit == "quadratic":
         params = np.polyfit(x_extrap, mi_array, 2)
-        mi_unbiased = params[2] / repeats
+        mi_unbiased = params[2]
     elif fit == "linear":
         params = np.polyfit(x_extrap, mi_array, 1)
-        mi_unbiased = params[1] / repeats
+        mi_unbiased = params[1]
 
     return mi_unbiased
 
 
-def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=1):
+def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=5):
 
     # very similiar to mutual information computation
     n_trials = len(target)
@@ -185,6 +190,9 @@ def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=1):
     # should have 3 pids completely ready
     # now to run polyfit, etc
 
+    pid_array[1, :] = pid_array[1, :] / repeats
+    pid_array[2, :] = pid_array[2, :] / repeats
+
     x_extrap = n_partitions / n_trials
 
     # for each column of pid_array, fit an equation:
@@ -193,14 +201,10 @@ def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=1):
         values = pid_array[:, idx]  # 0 is U1, 1 is U2, 2 is SI and 3 is CI
         if fit == "quadratic":
             params[idx, :] = np.polyfit(x_extrap, values, 2)
-            pid_unbiased[idx] = (
-                params[idx, 2] / repeats
-            )  # NOTE: divide here when we do more repetations
+            pid_unbiased[idx] = params[idx, 2]  # NOTE: divide here when we do more repetations
         elif fit == "linear":
             params[idx, :] = np.polyfit(x_extrap, values, 1)
-            pid_unbiased[idx] = (
-                params[idx, 1] / repeats
-            )  # NOTE: divide here when we do more repetations
+            pid_unbiased[idx] = params[idx, 1]  # NOTE: divide here when we do more repetations
 
     return pid_unbiased
 
@@ -233,7 +237,7 @@ def trivariate_plugin(source_a, source_b, target):
     return trivariate_mi
 
 
-def correct_trivariate_mi(source_a, source_b, target, repeats=1):
+def correct_trivariate_mi(source_a, source_b, target, repeats=5):
 
     n_trials = len(target)
     n_partitions = np.asarray([1, 2, 4])
@@ -264,12 +268,14 @@ def correct_trivariate_mi(source_a, source_b, target, repeats=1):
                     mi_array[idx] = mi_array[idx] + mi_temp / 4
 
     x_extrap = n_partitions / n_trials
+    mi_array[1] = mi_array[1] / repeats
+    mi_array[2] = mi_array[2] / repeats
 
     # for each column of mi_array, fit an equation:
     params = np.zeros((3))  # since QE
     # we look at only intercept terms
     params = np.polyfit(x_extrap, mi_array, 2)
-    mi_unbiased = params[2] / repeats
+    mi_unbiased = params[2]
 
     return mi_unbiased
 

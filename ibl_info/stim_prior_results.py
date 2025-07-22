@@ -454,10 +454,12 @@ def plot_information(
                 subsample_data,
                 original_incongruent_values,
                 pid_array=None,
-                marker=None,
+                significance_markers=None,
             )
         else:
-            plot_subsample(ax[2], None, original_incongruent_values, subsample_data, marker=None)
+            plot_subsample(
+                ax[2], None, original_incongruent_values, subsample_data, significance_markers=None
+            )
 
     info = ""
     if normalize_by_joint:
