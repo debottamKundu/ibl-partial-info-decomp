@@ -213,6 +213,7 @@ def prepare_neural_data(session_id, epoch, one, region):
     # find the neurons to be used:
     # for all
     neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals[0], region)
+    # NOTE: select neurons and discretize here; not after split
 
     if np.sum(neuron_flags) < 2:
         return information_pickle
