@@ -24,17 +24,19 @@ import warnings
 from sklearn.ensemble import RandomForestClassifier
 from ibl_info.prepare_data_pid import (
     cleaned_regions_flags,
+    get_new_cinc_intervals,
     get_window,
     prepare_ephys_data,
     get_congruent_incongruent_intervals,
-    cleaned_regions_single_region,
 )
-from ibl_info.utility import (
+from ibl_info.utils import (
     alternate_discretize,
     compute_mutual_information,
     compute_pid,
     compute_trivariate_mi,
     FIRING_RATE,
+    discretize,
+    equipopulated_binning,
 )
 import os
 import concurrent.futures
@@ -45,72 +47,8 @@ import random
 PERCENT_OF_SPIKE_THRESHOLD = 0.4
 
 
-def count_neurons(spikes, clusters, intervals, region):
-
-    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=5
-    )  # this returns all neurons from a single region that pass qc
-    # however, it is in trials x neurons
-    # i flip it
-
-    # check if anything is ever returned
-    if len(binned_spikes) == 0:
-        # return empty arrays
-        return 0
-
-    spike_data = binned_spikes[0].T
-    # clean this up ; throw away non-responsive neurons
-    # play with threshold
-    cleaned_binned_spikes = cleaned_regions_single_region(
-        spike_data, percent_of_no_spikes_threshold=PERCENT_OF_SPIKE_THRESHOLD
-    )
-
-    return cleaned_binned_spikes.shape[0]
-
-
-def get_neurons_used(session_id, epoch, one, region):
-    pids, probes = one.eid2pid(session_id)
-    if isinstance(probes, list) and len(probes) > 1:
-        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
-        spikes, clusters = merge_probes(
-            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
-        )
-    else:
-        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
-
-    # i only want one region normally
-    # or maybe we check how many regions this animal has
-    # that makes sense
-
-    window = get_window(epoch)
-    # print(window)
-
-    trials, mask = load_trials_and_mask(
-        one, session_id, exclude_nochoice=True, exclude_unbiased=True
-    )
-    trials = trials[mask]
-
-    # for now we are looking at just (stimulus interval)
-    # we know the order
-    labels = ["all", "congruent", "incongruent"]
-
-    intervals, _ = get_congruent_incongruent_intervals(trials, epoch)
-
-    count_pickle = {}
-
-    for idx in range(len(intervals)):
-        interval = intervals[idx]
-        print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
-        nneurons = count_neurons(spikes, clusters, interval, region)
-
-        count_pickle[labels[idx]] = nneurons
-
-    return count_pickle
-
-
 def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
 
-    # NOTE: maybe we can change the number of minimum units
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=5
     )
@@ -120,9 +58,6 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
         return [0]  # no neurons viable
 
     spike_data = binned_spikes[0].T
-    # clean this up ; throw away non-responsive neurons
-    # play with threshold
-
     firing_rate_threshold = FIRING_RATE[region]
     cleaned_neurons = cleaned_regions_flags(
         spike_data,
@@ -132,47 +67,66 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
     return cleaned_neurons
 
 
-def run_analysis_single_condition(
-    spikes, clusters, intervals, region, target_variable, cleaned_neuron_ids=None
-):
+def compute_condition(target, spikes):
+    mutual_information = compute_mutual_information(spikes, target)
+    pid = compute_pid(data=spikes, targets=target)
+    trivariate = compute_trivariate_mi(data=spikes, targets=target)
 
-    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=5
-    )  # this returns all neurons from a single region that pass qc
-    # however, it is in trials x neurons
-    # i flip it
-
-    # check if anything is ever returned
-    if len(binned_spikes) == 0:
-        # return empty arrays
-        return np.asarray([]), np.asarray([]), np.asarray([])
-
-    spike_data = binned_spikes[0].T
-    # clean this up ; throw away non-responsive neurons
-    # play with threshold
-    # we pass this in
-    if cleaned_neuron_ids is None:
-        cleaned_binned_spikes = cleaned_regions_single_region(spike_data, FIRING_RATE[region])
-    else:
-        if len(cleaned_neuron_ids) == 1:
-            return np.asarray([]), np.asarray([]), np.asarray([])
-        else:
-            cleaned_binned_spikes = spike_data[cleaned_neuron_ids, :]
-
-    # use the alternate binning
-    # NOTE: reduced binning here
-    discretized_spikes = alternate_discretize(
-        cleaned_binned_spikes, n_bins=3
-    )  # so either spike or no spike.
-
-    mutual_information = compute_mutual_information(discretized_spikes, target_variable)
-    pid = compute_pid(data=discretized_spikes, targets=target_variable)
-    trivariate = compute_trivariate_mi(data=discretized_spikes, targets=target_variable)
-
-    return mutual_information, pid, trivariate
+    return {
+        "mutual_information": mutual_information,
+        "pid": pid,
+        "trivariate": trivariate,
+    }
 
 
-def prepare_neural_data(session_id, epoch, one, region):
+def compute_subsampled(congruent_spikes, congruent_targets, incongruent_targets):
+
+    left_fraction = np.sum(incongruent_targets == 1) / len(incongruent_targets)
+
+    # we want to ensure similar fraction for congruent subsampling
+    left_congruent = np.where(congruent_targets == 1)[0]
+    right_congruent = np.where(congruent_targets == 0)[0]
+
+    sampled_mi = []
+    sampled_pid = []
+    sampled_joint = []
+    for repeats in range(6):
+
+        n_left_subsample = int(np.round(left_fraction * len(incongruent_targets)))
+        n_right_subsample = int(len(incongruent_targets) - n_left_subsample)
+
+        # now we need to do the actual subsampling
+        selected_indices_left = np.random.choice(left_congruent, n_left_subsample, replace=False)
+        selected_indices_right = np.random.choice(
+            right_congruent, n_right_subsample, replace=False
+        )
+
+        selected_indices = np.concatenate((selected_indices_left, selected_indices_right))
+        subsampled_targets = congruent_targets[selected_indices]
+        subsampled_spikes = congruent_spikes[:, selected_indices]
+
+        info_ = compute_condition(subsampled_targets, subsampled_spikes)
+        sampled_mi.append(info_["mutual_information"])
+        sampled_pid.append(info_["pid"])
+        sampled_joint.append(info_["trivariate"])
+
+    # average
+    sampled_mi = np.asarray(sampled_mi)
+    sampled_pid = np.asarray(sampled_pid)
+    sampled_joint = np.asarray(sampled_joint)
+
+    sampled_mi = np.mean(sampled_mi, axis=0)
+    sampled_pid = np.mean(sampled_pid, axis=0)
+    sampled_joint = np.mean(sampled_joint, axis=0)
+
+    return {
+        "mutual_information": sampled_mi,
+        "pid": sampled_pid,
+        "trivariate": sampled_joint,
+    }
+
+
+def run_analysis_single_session(session_id, epoch, one, region, discretize_method=1):
 
     pids, probes = one.eid2pid(session_id)
     if isinstance(probes, list) and len(probes) > 1:
@@ -183,155 +137,65 @@ def prepare_neural_data(session_id, epoch, one, region):
     else:
         spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
 
-    # i only want one region normally
-    # or maybe we check how many regions this animal has
-    # that makes sense
-
-    window = get_window(epoch)
-    print(window)
-
     trials, mask = load_trials_and_mask(
         one, session_id, exclude_nochoice=True, exclude_unbiased=True
     )
     trials = trials[mask]
 
-    # for now we are looking at just (stimulus interval)
-    # we know the order
-    labels = ["all", "congruent", "incongruent"]
-
-    intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
-
-    # also all trials computed here:
-    # makes things cleaner
+    intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+        trials, epoch
+    )
 
     trial_count = np.zeros((3))
-    for idx in range(len(intervals)):
-        trial_count[idx] = decoding_variables[idx].shape[0]
+
+    trial_count[0] = intervals.shape[0]
+    trial_count[1] = np.sum(congruent_flags)
+    trial_count[2] = np.sum(incongruent_flags)
 
     information_pickle = {}
 
     # find the neurons to be used:
     # for all
-    neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals[0], region)
-    # NOTE: select neurons and discretize here; not after split
-
+    neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
     if np.sum(neuron_flags) < 2:
         return information_pickle
 
-    for idx in range(len(intervals)):
-        interval = intervals[idx]
-        decoding_variable = decoding_variables[idx]
-        neurons_used = np.sum(neuron_flags)
-        print(f"Running analysis for {epoch} - {region} - {labels[idx]}")
-        mutual_information, pid, trivariate = run_analysis_single_condition(
-            spikes, clusters, interval, region, decoding_variable, cleaned_neuron_ids=neuron_flags
-        )
+    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
+        spikes, clusters, intervals, [region], minimum_units=5
+    )  # this returns all neurons from a single region that pass qc
+    # however, it is in trials x neurons
 
-        information_pickle[labels[idx]] = {
-            "mutual_information": mutual_information,
-            "pid": pid,
-            "tvmi": trivariate,
-            "trials": trial_count[idx],
-            "neurons": neurons_used,
-        }
+    # we want neurons x trials
+    spike_data = binned_spikes[0].T
 
-    return information_pickle
+    # clean up with neuron flags
+    spike_data = spike_data[neuron_flags, :]
 
-
-def run_subsampled_congruent(session_id, epoch, one, region):
-
-    # this is just same code to load things up:
-
-    pids, probes = one.eid2pid(session_id)
-    if isinstance(probes, list) and len(probes) > 1:
-        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
-        spikes, clusters = merge_probes(
-            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
-        )
+    # discretize here
+    if discretize_method == 1:
+        discretized_spikes = alternate_discretize(spike_data, n_bins=3)
     else:
-        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
+        # we can also do equipopulated
+        discretized_spikes = discretize(spike_data, n_bins=3)
 
-    # i only want one region normally
-    # or maybe we check how many regions this animal has
-    # that makes sense
+    information_pickle["trials"] = trial_count
+    information_pickle["neurons"] = np.sum(neuron_flags)
 
-    window = get_window(epoch)
-    print(window)
+    information_pickle["all"] = compute_condition(target_variable, discretized_spikes)
+    # congruent trials
+    congruent_spikes = discretized_spikes[:, congruent_flags]
+    congruent_targets = target_variable[congruent_flags]
+    information_pickle["congruent"] = compute_condition(congruent_targets, congruent_spikes)
+    # incongruent trials
+    incongruent_spikes = discretized_spikes[:, incongruent_flags]
+    incongruent_targets = target_variable[incongruent_flags]
 
-    trials, mask = load_trials_and_mask(
-        one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    information_pickle["incongruent"] = compute_condition(incongruent_targets, incongruent_spikes)
+
+    # compute subsamples on
+    information_pickle["subsampled"] = compute_subsampled(
+        congruent_spikes, congruent_targets, incongruent_targets
     )
-    trials = trials[mask]
-
-    # for now we are looking at just (stimulus interval)
-    # we know the order
-    labels = ["all", "congruent", "incongruent"]
-
-    intervals, decoding_variables = get_congruent_incongruent_intervals(trials, epoch)
-
-    # pick neurons
-    neurons_mask = select_neurons_for_analysis_all(
-        spikes, clusters, intervals[0], region
-    )  # same: use neurons subselected from all.
-
-    # incongruent is id 2
-    incongruent_decoding = decoding_variables[2]
-    left_incongruent = np.sum(incongruent_decoding[incongruent_decoding == 1]) / len(
-        incongruent_decoding
-    )
-
-    congruent_decoding = decoding_variables[1]
-    target_subsample = len(
-        incongruent_decoding
-    )  # because we want to have exactly the same number of trials
-
-    left_subsample = round(target_subsample * left_incongruent)
-    right_subsample = target_subsample - left_subsample
-
-    indices_congruent_left = np.where(congruent_decoding == 0)[0]
-    indices_congruent_right = np.where(congruent_decoding == 1)[0]
-
-    if len(indices_congruent_left) < left_subsample:
-        print(
-            f"Warning: Not enough '0' (left) congruent trials ({len(indices_congruent_left)}) to meet target ({left_subsample}). Subsampling all available '0' trials."
-        )
-        selected_indices_0 = list(indices_congruent_left)
-    else:
-        selected_indices_0 = random.sample(list(indices_congruent_left), left_subsample)
-
-    if len(indices_congruent_right) < right_subsample:
-        print(
-            f"Warning: Not enough '1' (right) congruent trials ({len(indices_congruent_right)}) to meet target ({right_subsample}). Subsampling all available '1' trials."
-        )
-        selected_indices_1 = list(indices_congruent_right)
-    else:
-        selected_indices_1 = random.sample(list(indices_congruent_right), right_subsample)
-
-    final_subsampled_indices = np.concatenate((selected_indices_0, selected_indices_1))
-
-    print(f"Total selected indices for subsampling: {len(final_subsampled_indices)}\n")
-
-    subsampled_decoding = congruent_decoding[final_subsampled_indices]
-    congruent_intervals = intervals[1][final_subsampled_indices]
-
-    trials = len(subsampled_decoding)
-
-    print(f"Running analysis for {epoch} - {region} - subsampled")
-    mutual_information, pid, trivariate = run_analysis_single_condition(
-        spikes,
-        clusters,
-        congruent_intervals,
-        region,
-        subsampled_decoding,
-        cleaned_neuron_ids=neurons_mask,
-    )
-
-    information_pickle = {
-        "mutual_information": mutual_information,
-        "pid": pid,
-        "tvmi": trivariate,
-        "trials": trials,
-    }
 
     return information_pickle
 
@@ -351,7 +215,7 @@ def run_selective_decomposition(one, list_of_regions, epoch):
         region_pickle = {}
         for eid in tqdm(selective_eids):
             try:
-                information_pickle = prepare_neural_data(eid, epoch, one, region)
+                information_pickle = run_analysis_single_session(eid, epoch, one, region)
                 region_pickle[eid] = information_pickle
                 # eids_done += 1
             except Exception as e:
@@ -359,46 +223,6 @@ def run_selective_decomposition(one, list_of_regions, epoch):
                 continue
         with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
-
-
-# refactoring so that i can run this in parallel
-def process_region_task(region, epoch):
-
-    one = ONE()
-    unit_df = bwm_units(one)
-    selective_eids = filter_eids(unit_df, region)
-    region_pickle = {}
-    for eid in tqdm(selective_eids):
-        try:
-            information_pickle = prepare_neural_data(eid, epoch, one, region)
-            region_pickle[eid] = information_pickle
-        except Exception as e:
-            print(e)
-            continue
-
-    with open(f"./data/generated/selective_decomposition_{region}_{epoch}.pkl", "wb") as f:
-        pkl.dump(region_pickle, f)
-
-    print(f"Worker {os.getpid()} finished {region}")
-    return region
-
-
-def run_selective_decomposition_parallel(list_of_regions, epoch):
-
-    max_regions = len(list_of_regions)
-    partial_process_region = functools.partial(
-        process_region_task,
-        epoch=epoch,
-    )
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_regions) as executor:
-
-        results_iterator = executor.map(partial_process_region, list_of_regions)
-
-        for result in tqdm(
-            results_iterator, total=len(list_of_regions), desc="Processing Regions"
-        ):
-            print(result)
 
 
 if __name__ == "__main__":

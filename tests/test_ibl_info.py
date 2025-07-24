@@ -1,6 +1,6 @@
 import pytest
 
-from ibl_info.utility import aggregated_regions_time_intervals, aggregated_regions_time_resolved
+from ibl_info.utils import aggregated_regions_time_intervals, aggregated_regions_time_resolved
 import numpy as np
 
 def test_aggregated_regions_time_intervals():

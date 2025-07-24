@@ -30,7 +30,7 @@ from ibl_info.measures.broja_pid import (
     unbiasedMI,
     MI,
 )
-from ibl_info.utility import discretize_neural_data, subsample
+from ibl_info.utils import discretize_neural_data, subsample
 from ibl_info.prepare_data_pid import compute_intervals, prepare_ephys_data
 
 # from ibl_info.old_code.load_glm_hmm import load_state_dataframe

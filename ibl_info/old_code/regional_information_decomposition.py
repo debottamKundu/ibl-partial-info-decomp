@@ -23,7 +23,7 @@ from pathlib import Path
 from brainbox.singlecell import bin_spikes2D
 
 from ibl_info.measures.broja_pid import compute_pid, coinformation
-from ibl_info.utility import discretize_neural_data
+from ibl_info.utils import discretize_neural_data
 from ibl_info.prepare_data_pid import prepare_ephys_data, compute_intervals
 from brainwidemap.bwm_loading import merge_probes
 from ibl_info.old_code.load_glm_hmm import load_state_dataframe

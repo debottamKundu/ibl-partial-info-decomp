@@ -1,4 +1,4 @@
-from ibl_info.utility import download_data
+from ibl_info.utils import download_data
 from one.api import ONE
 from brainbox.io.one import SessionLoader
 from brainwidemap import bwm_units, bwm_query

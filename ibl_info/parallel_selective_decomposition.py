@@ -27,66 +27,31 @@ from tqdm import tqdm
 from pathlib import Path
 import warnings
 from sklearn.ensemble import RandomForestClassifier
-from ibl_info.prepare_data_pid import (
-    get_window,
-    prepare_ephys_data,
-    get_congruent_incongruent_intervals,
-    cleaned_regions_single_region,
-)
-from ibl_info.utility import (
-    alternate_discretize,
-    compute_mutual_information,
-    compute_pid,
-    compute_trivariate_mi,
-)
 import os
 import concurrent.futures
 import functools
-
-from ibl_info.selective_decomposition import (
-    run_analysis_single_condition,
-    prepare_neural_data,
-    filter_eids,
-    run_subsampled_congruent,
-    get_neurons_used,
-)
-
-
-def prep_count_data(task_tuple):
-
-    eid, region, epoch = task_tuple
-    one = ONE()
-    try:
-        # ideally information pickle, but i want to subsample mutliple times
-        information_pickle = get_neurons_used(eid, epoch, one, region)
-        return region, eid, information_pickle
-    except Exception as e:
-        print(f"Error regarding {eid} in region {region}: {e}")
-        return region, eid, None
+from ibl_info.selective_decomposition import run_analysis_single_session, filter_eids
 
 
 def prepare_and_run_data(task_tuple):
 
-    eid, region, epoch = task_tuple
+    eid, region, epoch, discretizer = task_tuple
     one = ONE()
     try:
         # ideally information pickle, but i want to subsample mutliple times
-        information_pickle = prepare_neural_data(eid, epoch, one, region)
+        information_pickle = run_analysis_single_session(
+            eid, epoch, one, region, discretize_method=discretizer
+        )
         if information_pickle == {}:
             return region, eid, None
-        subsampled_pickle = {}
-        for idx in range(6):
-            congruent_subsampled_pickle = run_subsampled_congruent(eid, epoch, one, region)
-            subsampled_pickle[idx] = congruent_subsampled_pickle  # bit larger but whatever
-        # originally
-        information_pickle["subsampled"] = subsampled_pickle
-        return region, eid, information_pickle
+        else:
+            return region, eid, information_pickle
     except Exception as e:
         print(f"Error regarding {eid} in region {region}: {e}")
         return region, eid, None
 
 
-def run_flattened(list_of_regions, epoch):
+def run_flattened(list_of_regions, epoch, discretizer):
 
     one = ONE()
     unit_df = bwm_units(one)
@@ -94,12 +59,12 @@ def run_flattened(list_of_regions, epoch):
     for region in list_of_regions:
         selective_eids = filter_eids(unit_df, region)
         for eid in tqdm(selective_eids):
-            all_tasks_to_run.append((eid, region, epoch))
+            all_tasks_to_run.append((eid, region, epoch, discretizer))
 
     print(f"Total tasks: {len(all_tasks_to_run)}")
 
     processed_results = []
-    workers = os.cpu_count() // 4
+    workers = os.cpu_count() // 4  # type: ignore
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
         results_iterator = executor.map(prepare_and_run_data, all_tasks_to_run)
 
@@ -118,10 +83,6 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    # this will make one huge pickle:
-    # with regions and then eids for each region
-
-    # now we can iterate through items and save
     for region, region_pickle in region_data.items():
         with open(
             f"./data/generated/selective_decomposition_{region}_{epoch}_datacount.pkl", "wb"
@@ -161,11 +122,8 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    # one = ONE()
-    # run_selective_decomposition(one, important_regions, "stim")
-
-    run_flattened(important_regions, "stim")
+    run_flattened(important_regions, "stim", 1)
 
     # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
-    random_regions = ["SCs", "VISa", "PO"]
-    run_flattened(random_regions, "stim")
+    # random_regions = ["SCs", "VISa", "PO"]
+    # run_flattened(random_regions, "stim")

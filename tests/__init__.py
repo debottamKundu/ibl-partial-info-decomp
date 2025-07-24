@@ -1,1 +1,1 @@
-from ibl_info import config  # noqa: F401
+from ibl_info.old_code import config  # noqa: F401

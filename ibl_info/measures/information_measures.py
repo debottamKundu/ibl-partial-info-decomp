@@ -201,10 +201,10 @@ def pid_unbiased(source_a, source_b, target, fit="quadratic", repeats=5):
         values = pid_array[:, idx]  # 0 is U1, 1 is U2, 2 is SI and 3 is CI
         if fit == "quadratic":
             params[idx, :] = np.polyfit(x_extrap, values, 2)
-            pid_unbiased[idx] = params[idx, 2]  # NOTE: divide here when we do more repetations
+            pid_unbiased[idx] = params[idx, 2]
         elif fit == "linear":
             params[idx, :] = np.polyfit(x_extrap, values, 1)
-            pid_unbiased[idx] = params[idx, 1]  # NOTE: divide here when we do more repetations
+            pid_unbiased[idx] = params[idx, 1]
 
     return pid_unbiased
 
