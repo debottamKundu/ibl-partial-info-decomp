@@ -32,7 +32,7 @@ import concurrent.futures
 import time
 
 
-def get_spike_data_in_binsv2(spikes, clusters, intervals, region):
+def get_spike_data_in_binsv2(spikes, clusters, intervals, region, tiling_interval=10):
 
     # do check if cluster acronyms are in the regions provided
     brainreg = BrainRegions()
@@ -51,6 +51,10 @@ def get_spike_data_in_binsv2(spikes, clusters, intervals, region):
     idxs_used = np.unique(clusters_masked)
     clusters_uuids = list(clusters.iloc[idxs_used]["uuids"])
     # bin spikes from those clusters
+
+    # modify this to tile the intervals
+    # split up interval into tile-ms increments
+
 
     binned, _ = get_spike_counts_in_bins(
         spike_times=times_masked, spike_clusters=clusters_masked, intervals=intervals
@@ -80,32 +84,26 @@ def get_firing_rates_for_animal(one, session_id, epoch, region):
     # for now we are looking at just (stimulus interval)
     # we know the order
     intervals_by_congruency, _ = get_congruent_incongruent_intervals(trials, epoch)
-    intervals_by_contrast = get_contrast_intervals(trials, epoch)
-    # also compute firing rate using the entire window
 
     binned_spikes = []
     for interval in intervals_by_congruency:
-        binned, _, _, _, firing_rate_a = get_spike_data_in_binsv2(
+        binned, _, _, _, _ = get_spike_data_in_binsv2(
             spikes, clusters, interval, region
         )
         binned_spikes.append(binned)
 
-    for interval in intervals_by_contrast:
-        binned, _, _, _, firing_rate_b = get_spike_data_in_binsv2(
-            spikes, clusters, interval, region
-        )
-        binned_spikes.append(binned)
 
     # firing rate a should be the same as firing rate b
-    assert np.allclose(firing_rate_a, firing_rate_b)  # type: ignore
-    spike_rates = np.zeros(
-        (len(binned_spikes) + 1, len(binned_spikes[0]))
-    )  # one to add the global rate
+    # assert np.allclose(firing_rate_a, firing_rate_b)  # type: ignore
+    # spike_rates = np.zeros(
+    #     (len(binned_spikes) + 1, len(binned_spikes[0]))
+    # )  # one to add the global rate
     time_window = get_window("stim")
 
-    for i, binned_neuron in enumerate(binned_spikes):
-        binned_rate = binned_neuron / time_window[1] - time_window[0]
-        spike_rates[i, :] = np.mean(binned_rate, axis=1)
+    # for i, binned_neuron in enumerate(binned_spikes):
+    #     binned_rate = binned_neuron / time_window[1] - time_window[0]
+    #     spike_rates[i, :] = np.mean(binned_rate, axis=1)
+
 
     spike_rates[-1, :] = firing_rate_b  # type: ignore
 
