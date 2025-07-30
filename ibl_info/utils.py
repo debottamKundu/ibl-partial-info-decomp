@@ -132,6 +132,13 @@ def check_config():
     return config
 
 
+def epoch_events(epoch):
+    if epoch == "stim":
+        return "stimOn_times"
+    else:
+        raise NotImplementedError
+
+
 # define constants
 
 FIRING_RATE = {

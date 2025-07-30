@@ -165,4 +165,6 @@ def add_sig_legends(ax, mask_label="Not significant"):
         handlelength=0.7,
         handletextpad=0.5,
     )
+
     return legend
+
