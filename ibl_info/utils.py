@@ -8,7 +8,6 @@ from brainbox.io.one import SessionLoader
 from brainwidemap import load_good_units
 import pandas as pd
 from tqdm import tqdm
-from decision_rnn.information_measures.processing import equipopulated_binning
 
 
 def equipopulated_binning(signal, n_bins=5):
@@ -127,7 +126,7 @@ def compute_trivariate_mi(data, targets):
 def check_config():
     """Load config yaml and perform some basic checks"""
     # Get config
-    with open(Path(__file__).parent.joinpath("config.yaml"), "r") as config_yml:
+    with open(Path(__file__).parent.parent.joinpath("config.yaml"), "r") as config_yml:
         config = yaml.safe_load(config_yml)
     return config
 

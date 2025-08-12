@@ -13,6 +13,7 @@ from itertools import combinations
 from ibl_info.utils import discretize
 from ibl_info.measures import information_measures as info
 import pickle as pkl
+from tqdm import tqdm
 
 config = check_config()
 
@@ -25,7 +26,7 @@ def cleanup_and_discretize(data_epoch, actual_regions):
         if data_epoch[idx].shape[-1] > config["min_units"]:
             regions_to_keep[idx] = 1
 
-    regions_to_keep = np.asarray(regions_to_keep, dtype=bool)
+    regions_to_keep = np.asarray(regions_to_keep, dtype=np.bool)
     regions_used_acronyms = np.asarray(actual_regions)[regions_to_keep]
 
     discretized_data_epoch = []
@@ -51,7 +52,7 @@ def cleanup_and_discretize(data_epoch, actual_regions):
 def region_combinations(n_regions):
 
     combinations_regions = []
-    for x in combinations(range(len(n_regions)), 2):
+    for x in combinations(range(n_regions), 2):
         combinations_regions.append([x[0], x[1]])
     combinations_regions = np.asarray(combinations_regions)
     return combinations_regions
@@ -65,12 +66,12 @@ def information_for_region_pair(region_a, region_b, target):
     mi_region_a = np.zeros((neurons_a))
     mi_region_b = np.zeros((neurons_b))
 
-    for n1 in range(neurons_a):
+    for n1 in tqdm(range(neurons_a)):
         mi_region_a[n1] = info.corrected_mutual_information(  # type: ignore
             target=target, source=region_a[n1, :]
         )
 
-    for n2 in range(neurons_a):
+    for n2 in tqdm(range(neurons_b)):
         mi_region_b[n2] = info.corrected_mutual_information(  # type: ignore
             target=target, source=region_b[n2, :]
         )
@@ -80,7 +81,7 @@ def information_for_region_pair(region_a, region_b, target):
 
     combination_idx = 0
 
-    for n1 in range(neurons_a):
+    for n1 in tqdm(range(neurons_a)):
         for n2 in range(neurons_b):
 
             tvmi = info.corrected_tvmi(
@@ -133,7 +134,7 @@ def subsampled_results(region_a, region_b, target_variable, congruent_flags, inc
     sampled_mi_regionb = []
     sampled_pid = []
     sampled_joint = []
-    for repeats in range(6):
+    for repeats in range(2):  # should be 5 or more, lower in order to speed up
 
         n_left_subsample = int(np.round(left_fraction * len(incongruent_targets)))
         n_right_subsample = int(len(incongruent_targets) - n_left_subsample)
@@ -181,9 +182,13 @@ def wfi_by_eid(session_id, epoch="stim"):
     align_event = epoch_events(epoch)  # should default to stimon
     one = ONE()
 
+    # probably this one doesn't work
+    # use sessionloader
+    sl = SessionLoader(one, eid=session_id)
     trials, mask = load_trials_and_mask(
         one,
         session_id,
+        sess_loader=sl,  # using session loader to load trials so that we get proper probability
         exclude_nochoice=True,
         exclude_unbiased=True,
     )
@@ -203,6 +208,10 @@ def wfi_by_eid(session_id, epoch="stim"):
     )
 
     total_frames = data_epoch[0].shape[1]
+
+    # for idx in range(len(data_epoch)):
+    #     print(f"{actual_regions[idx]}: , {data_epoch[idx].shape[-1]}")
+
     # discretize, throw away
     discretized_data, used_regions = cleanup_and_discretize(data_epoch, actual_regions)
 
@@ -215,15 +224,15 @@ def wfi_by_eid(session_id, epoch="stim"):
     for frame in range(total_frames):
         frame_pickle = {}
         # TODO: this is the best place to add parallelization
-        for region_pairs in region_combos:
+        for region_pairs in tqdm(region_combos):
             region_idx = region_pairs[0]
             region_idy = region_pairs[1]
 
-            # now what
+            # now what : remove all these random things
             region_a = discretized_data[region_idx][frame, :]
             region_b = discretized_data[region_idy][frame, :]
 
-            key = f"{used_regions[region_idx], used_regions[region_idy]}"
+            key = f"{str(used_regions[region_idx][0]), str(used_regions[region_idy][0])}"
 
             cnc_data = {}
 
@@ -256,16 +265,19 @@ def run_wfi(info=""):
 
     for session_id in sessions:  # type: ignore
 
+        # run one
+
         try:
             region_pickle = wfi_by_eid(session_id, "stim")
 
-            with open(f"../data/generated/{session_id}_wfi_{info}.pkl", "wb") as f:
+            with open(f"./data/generated/{session_id}_wfi_{info}.pkl", "wb") as f:
                 pkl.dump(region_pickle, f)
         except Exception as e:
             print(f"{e}, for eid {session_id}")
+        break
 
     return
 
 
 if __name__ == "__main__":
-    run_wfi(info="5bins")
+    run_wfi(info="3bins")
