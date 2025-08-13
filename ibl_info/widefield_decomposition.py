@@ -1,3 +1,4 @@
+from joblib import Parallel, delayed
 from one.api import ONE
 from pathlib import Path
 import numpy as np
@@ -14,6 +15,7 @@ from ibl_info.utils import discretize
 from ibl_info.measures import information_measures as info
 import pickle as pkl
 from tqdm import tqdm
+import os
 
 config = check_config()
 
@@ -66,12 +68,12 @@ def information_for_region_pair(region_a, region_b, target):
     mi_region_a = np.zeros((neurons_a))
     mi_region_b = np.zeros((neurons_b))
 
-    for n1 in tqdm(range(neurons_a)):
+    for n1 in range(neurons_a):
         mi_region_a[n1] = info.corrected_mutual_information(  # type: ignore
             target=target, source=region_a[n1, :]
         )
 
-    for n2 in tqdm(range(neurons_b)):
+    for n2 in range(neurons_b):
         mi_region_b[n2] = info.corrected_mutual_information(  # type: ignore
             target=target, source=region_b[n2, :]
         )
@@ -81,7 +83,7 @@ def information_for_region_pair(region_a, region_b, target):
 
     combination_idx = 0
 
-    for n1 in tqdm(range(neurons_a)):
+    for n1 in range(neurons_a):
         for n2 in range(neurons_b):
 
             tvmi = info.corrected_tvmi(
@@ -177,12 +179,12 @@ def subsampled_results(region_a, region_b, target_variable, congruent_flags, inc
     }
 
 
-def wfi_by_eid(session_id, epoch="stim"):
+def wfi_by_eid(session_id, regions, epoch="stim"):
 
     align_event = epoch_events(epoch)  # should default to stimon
     one = ONE()
 
-    # probably this one doesn't work
+    # probably this one doesnt work
     # use sessionloader
     sl = SessionLoader(one, eid=session_id)
     trials, mask = load_trials_and_mask(
@@ -200,7 +202,7 @@ def wfi_by_eid(session_id, epoch="stim"):
         one,
         session_id,
         hemisphere=config["hemisphere"],
-        regions="single_regions",
+        regions=regions,
         align_times=align_times,
         frame_window=config["frames"],
         functional_channel=470,
@@ -208,6 +210,8 @@ def wfi_by_eid(session_id, epoch="stim"):
     )
 
     total_frames = data_epoch[0].shape[1]
+
+    print(f"total frames: {total_frames}, regions: {actual_regions}")
 
     # for idx in range(len(data_epoch)):
     #     print(f"{actual_regions[idx]}: , {data_epoch[idx].shape[-1]}")
@@ -224,7 +228,7 @@ def wfi_by_eid(session_id, epoch="stim"):
     for frame in range(total_frames):
         frame_pickle = {}
         # TODO: this is the best place to add parallelization
-        for region_pairs in tqdm(region_combos):
+        for region_pairs in tqdm(region_combos, desc="Running for all region pairs"):
             region_idx = region_pairs[0]
             region_idy = region_pairs[1]
 
@@ -257,27 +261,48 @@ def wfi_by_eid(session_id, epoch="stim"):
     return region_pickle
 
 
-def run_wfi(info=""):
+def process_session(session_id, save_info):
+
+    significant_regions = [
+        ["MOs"],
+        ["SSp-ul"],
+        ["VISam"],
+        ["VISl"],
+        ["VISp"],
+        ["ACAd"],
+        ["PL"],
+        ["RSPv"],
+        ["VISa"],
+    ]
+    # also use regions = "single_regions" to use all
+    try:
+        region_pickle = wfi_by_eid(session_id, regions=significant_regions, epoch="stim")
+        with open(f"./data/generated/{session_id}_wfi_{save_info}.pkl", "wb") as f:
+            pkl.dump(region_pickle, f)
+        return 1
+    except Exception as e:
+        print(f"{e}, for eid {session_id}")
+        return -1
+
+
+def run_wfi(save_info=""):
 
     one = ONE()
     sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
 
-    for session_id in sessions:  # type: ignore
+    # we will parallelize this
 
-        # run one
+    n_cores = os.cpu_count() - 4  # type: ignore
 
-        try:
-            region_pickle = wfi_by_eid(session_id, "stim")
+    results = Parallel(n_jobs=n_cores, verbose=10)(
+        delayed(process_session)(session_id, save_info) for session_id in sessions  # type: ignore
+    )
 
-            with open(f"./data/generated/{session_id}_wfi_{info}.pkl", "wb") as f:
-                pkl.dump(region_pickle, f)
-        except Exception as e:
-            print(f"{e}, for eid {session_id}")
-        break
-
-    return
+    print(results)
+    # embarrasing dry run
+    # process_session(sessions[0], save_info)  # type: ignore
 
 
 if __name__ == "__main__":
-    run_wfi(info="3bins")
+    run_wfi(save_info="3bins")
