@@ -42,26 +42,44 @@ import os
 import concurrent.futures
 import functools
 import random
+from ibl_info.utils import check_config
+
+config = check_config()
 
 # define const
 PERCENT_OF_SPIKE_THRESHOLD = 0.4
 
 
-def select_neurons_for_analysis_all(spikes, clusters, intervals, region):
+def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session_id=None):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=5
+        spikes, clusters, intervals, [region], minimum_units=3
     )
+
+    if session_id is not None:
+        filename = f"./data/processed/singlecellresults/significance_results_{session_id}.csv"
+        df = pd.read_csv(filename)
+        ccids_significant = df[df["p_value"] <= 0.05]["QC_cluster_id"].values
+        mask = np.isin(np.asarray(cluster_uuids_list[0]), ccids_significant)  # type: ignore
+    else:
+        mask = np.ones(len(cluster_uuids_list[0]), dtype=bool)
+        # essentially status quo
 
     if len(binned_spikes) == 0:
         # return empty arrays
         return [0]  # no neurons viable
 
-    spike_data = binned_spikes[0].T
-    firing_rate_threshold = FIRING_RATE[region]
+    spike_data = binned_spikes[0][:, mask].T
+    if session_id is not None:
+        firing_rate_threshold = 0
+        percent_spike = 0
+    else:
+        firing_rate_threshold = FIRING_RATE[region]
+        percent_spike = PERCENT_OF_SPIKE_THRESHOLD
     cleaned_neurons = cleaned_regions_flags(
         spike_data,
         firing_rate_threshold=firing_rate_threshold,
+        percent_of_no_spikes_threshold=percent_spike,
     )
 
     return cleaned_neurons
@@ -90,7 +108,7 @@ def compute_subsampled(congruent_spikes, congruent_targets, incongruent_targets)
     sampled_mi = []
     sampled_pid = []
     sampled_joint = []
-    for repeats in range(6):
+    for repeats in range(3):  # should be 5 or more, lower in order to speed up
 
         n_left_subsample = int(np.round(left_fraction * len(incongruent_targets)))
         n_right_subsample = int(len(incongruent_targets) - n_left_subsample)
@@ -126,7 +144,9 @@ def compute_subsampled(congruent_spikes, congruent_targets, incongruent_targets)
     }
 
 
-def run_analysis_single_session(session_id, epoch, one, region, discretize_method=1):
+def run_analysis_single_session(
+    session_id, epoch, one, region, discretize_method=1, single_cell_filter=False
+):
 
     pids, probes = one.eid2pid(session_id)
     if isinstance(probes, list) and len(probes) > 1:
@@ -156,12 +176,17 @@ def run_analysis_single_session(session_id, epoch, one, region, discretize_metho
 
     # find the neurons to be used:
     # for all
-    neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
+    if single_cell_filter:
+        neuron_flags = select_neurons_for_analysis_all(
+            spikes, clusters, intervals, region, session_id=session_id
+        )
+    else:
+        neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
     if np.sum(neuron_flags) < 2:
         return information_pickle
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=5
+        spikes, clusters, intervals, [region], minimum_units=3
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
 
@@ -172,11 +197,12 @@ def run_analysis_single_session(session_id, epoch, one, region, discretize_metho
     spike_data = spike_data[neuron_flags, :]
 
     # discretize here
+    n_bins = config["n_bins"]
     if discretize_method == 1:
-        discretized_spikes = alternate_discretize(spike_data, n_bins=3)
+        discretized_spikes = alternate_discretize(spike_data, n_bins=n_bins)
     else:
         # we can also do equipopulated
-        discretized_spikes = discretize(spike_data, n_bins=3)
+        discretized_spikes = discretize(spike_data, n_bins=n_bins)
 
     information_pickle["trials"] = trial_count
     information_pickle["neurons"] = np.sum(neuron_flags)

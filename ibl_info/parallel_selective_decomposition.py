@@ -31,16 +31,25 @@ import os
 import concurrent.futures
 import functools
 from ibl_info.selective_decomposition import run_analysis_single_session, filter_eids
+from ibl_info.utils import check_config
+
+config = check_config()
 
 
 def prepare_and_run_data(task_tuple):
 
     eid, region, epoch, discretizer = task_tuple
+    single_cell_filter = config["single_cell_filter"]
     one = ONE()
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = run_analysis_single_session(
-            eid, epoch, one, region, discretize_method=discretizer
+            eid,
+            epoch,
+            one,
+            region,
+            discretize_method=discretizer,
+            single_cell_filter=single_cell_filter,
         )
         if information_pickle == {}:
             return region, eid, None
@@ -83,9 +92,23 @@ def run_flattened(list_of_regions, epoch, discretizer):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
+    if config["single_cell_filter"]:
+        suffix = "filtered"
+    else:
+        suffix = "unfiltered"
+
+    if discretizer == 1:
+        suffix += "_alternate"
+    else:
+        suffix += "_equipopulated"
+
+    n_bins = config["n_bins"]
+    suffix += f"_{n_bins}"
+
+    # this will make one huge pickle:
     for region, region_pickle in region_data.items():
         with open(
-            f"./data/generated/selective_decomposition_{region}_{epoch}_datacount.pkl", "wb"
+            f"./data/generated/selective_decomposition_{region}_{epoch}_{suffix}.pkl", "wb"
         ) as f:
             pkl.dump(region_pickle, f)
 
@@ -123,6 +146,8 @@ if __name__ == "__main__":
     ]
 
     run_flattened(important_regions, "stim", 1)
+    # 1 is the alternate method
+    # can i somehow use the nbins?
 
     # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
     # random_regions = ["SCs", "VISa", "PO"]

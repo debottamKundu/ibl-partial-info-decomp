@@ -1,6 +1,7 @@
-min_units: 10
+min_units: 3
 min_behav_trials: 10
-n_bins: 4
+n_bins: 3
+single_cell_filter: True
 repeats_for_bias_correction: 5
 bias_correction: 'qe'
 min_rt: 0.08

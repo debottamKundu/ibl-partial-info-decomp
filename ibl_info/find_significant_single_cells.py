@@ -13,7 +13,7 @@ from tqdm import tqdm
 import concurrent.futures
 
 
-def BWM_stim_test_combined(one, eid, TimeWindow=np.array([0.0, 0.2])):
+def BWM_stim_test_combined(one, eid, TimeWindow=np.array([0.0, 0.1])):
 
     # load spike data
 
@@ -79,7 +79,7 @@ def save_significance_results(eid):
 
     one = ONE()
     p_1, area_label, QC_cluster_id = BWM_stim_test_combined(
-        one, eid, TimeWindow=np.array([0.0, 0.2])
+        one, eid, TimeWindow=np.array([0.0, 0.1])
     )
     df = pd.DataFrame(
         {

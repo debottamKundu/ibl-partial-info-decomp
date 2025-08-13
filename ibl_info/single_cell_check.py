@@ -69,7 +69,7 @@ def run_for_session(session_id, epoch, one, region, df):
         spikes, clusters, intervals, [region], minimum_units=1
     )
 
-    ccids_significant = df[df["p_value"] < 0.05]["QC_cluster_id"].values
+    ccids_significant = df[df["p_value"] <= 0.05]["QC_cluster_id"].values
 
     nxs = len(
         list(set(cluster_uuids_list[0]).intersection(set(ccids_significant)))
@@ -90,7 +90,7 @@ def check_single_cell_statistics(list_of_regions, epoch):
         for eid in tqdm(selective_eids):
             try:
                 # we get cluster_id_list here from requisite data frame
-                filename = f"./data/processed/significance_results_{eid}.csv"
+                filename = f"./data/processed/singlecellresults/significance_results_{eid}.csv"
                 df = pd.read_csv(filename)
                 number_of_neurons = run_for_session(eid, epoch, one, region, df)
                 region_pickle[eid] = number_of_neurons
