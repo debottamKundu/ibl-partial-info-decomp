@@ -6,7 +6,7 @@ bias_correction: 'qe'
 min_rt: 0.08
 max_rt: None
 hemisphere: ("left", "right")
-frames: [1,2]
+frames: [0,2]
 freeze: None
 stim_prior_regions : [
         "VISp",
