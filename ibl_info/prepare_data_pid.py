@@ -40,7 +40,6 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
         # NOTE ::: add it here
 
         if sum(region_mask) < minimum_units:
-            print(f"{(region)} below min units threshold ({minimum_units})")
             continue
         else:
             # find all spikes in those clusters
@@ -49,7 +48,9 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
             clusters_masked = spikes["clusters"][spike_mask]
             # record cluster uuids
             idxs_used = np.unique(clusters_masked)
-            clusters_uuids = list(clusters.iloc[idxs_used]["uuids"])
+            clusters_uuids = list(
+                clusters.iloc[idxs_used]["cluster_id"]
+            )  # note: changed cluster uuids to cluster id so that we can segment
             # bin spikes from those clusters
 
             binned, _ = get_spike_counts_in_bins(
