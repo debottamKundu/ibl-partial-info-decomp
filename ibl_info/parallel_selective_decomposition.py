@@ -63,7 +63,7 @@ def prepare_and_run_data(task_tuple):
 def run_flattened(list_of_regions, epoch, discretizer):
 
     one = ONE()
-    unit_df = pd.read_csv("./data/processed/bwm_units.csv")
+    unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
         selective_eids = filter_eids(unit_df, region)
