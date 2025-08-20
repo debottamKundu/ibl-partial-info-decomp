@@ -417,13 +417,13 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    # run_flattened(important_regions, "stim")
-    one = ONE()
-    unit_df = bwm_units(one)
-    region = "ZI"
-    selective_eids = filter_eids(unit_df, region)
+    run_flattened(important_regions, "stim")
+    # one = ONE()
+    # unit_df = bwm_units(one)
+    # region = "ZI"
+    # selective_eids = filter_eids(unit_df, region)
 
-    session_id = selective_eids[0]
-    ipickle = run_decoder_single_session(
-        session_id=session_id, epoch="stim", one=one, region=region
-    )
+    # session_id = selective_eids[0]
+    # ipickle = run_decoder_single_session(
+    #     session_id=session_id, epoch="stim", one=one, region=region
+    # )

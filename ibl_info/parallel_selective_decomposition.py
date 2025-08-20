@@ -145,7 +145,8 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    run_flattened(important_regions, "stim", 1)
+    discretizer = config["discretize"]
+    run_flattened(important_regions, "stim", discretizer=discretizer)
     # 1 is the alternate method
     # can i somehow use the nbins?
 

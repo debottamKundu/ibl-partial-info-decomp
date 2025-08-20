@@ -34,6 +34,7 @@ from ibl_info.utils import (
     compute_trivariate_mi,
     FIRING_RATE,
     discretize,
+    discretize_keeping_zeros,
     equipopulated_binning,
 )
 import os
@@ -203,10 +204,11 @@ def run_analysis_single_session(
         discretized_spikes = alternate_discretize(spike_data, n_bins=n_bins)
     else:
         # we can also do equipopulated
-        discretized_spikes = discretize(spike_data, n_bins=n_bins)
+        discretized_spikes = discretize_keeping_zeros(spike_data, n_bins=n_bins)
 
     information_pickle["trials"] = trial_count
     information_pickle["neurons"] = np.sum(neuron_flags)
+    information_pickle["average_spikes"] = np.mean(spike_data, axis=1)
 
     information_pickle["all"] = compute_condition(target_variable, discretized_spikes)
     # congruent trials

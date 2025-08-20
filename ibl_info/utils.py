@@ -76,6 +76,64 @@ def discretize(spike_data, n_bins=5):
     return discrete_data
 
 
+def modified_equi_binning(counts, n_bins=4):
+    """
+    Discretize spike counts for one neuron across trials.
+
+    Parameters
+    ----------
+    counts : array-like, shape (N,)
+        Spike counts across N trials (nonnegative integers).
+    n_bins : int, default=4
+        Number of quantile bins for positive counts.
+    log_transform : bool, default=False
+        If True, apply log1p transform before computing quantiles.
+    Returns
+    -------
+    discretized : np.ndarray, shape (N,)
+        Discretized counts. 0 = no spike, 1..n_bins = equiprobable bins of positive counts.
+    """
+    counts = np.asarray(counts)
+    discretized = np.full_like(counts, -1, dtype=int)
+
+    # Zeros stay as 0
+    zero_mask = counts == 0
+    discretized[zero_mask] = 0
+
+    # Positive values
+    pos_mask = counts > 0
+    pos_vals = counts[pos_mask]
+    if pos_vals.size == 0:
+        return discretized
+
+    # Optional log transform (preserves ordering)
+    vals_for_cut = pos_vals.astype(float)
+
+    # Compute quantile bin edges
+    q = np.linspace(0, 1, n_bins + 1)[1:-1]
+    edges = np.quantile(vals_for_cut, q, method="linear")
+
+    # Digitize into bins
+    bins = np.digitize(vals_for_cut, bins=edges, right=True)  # 0..K-1
+    discretized[pos_mask] = bins + 1  # shift to 1..K
+
+    return discretized
+
+
+def discretize_keeping_zeros(spike_data, n_bins=5):
+    """discretize into specified number of equipopulated bins
+
+    Args:
+        spike_data (np.array): neurons x trials
+    """
+
+    discrete_data = np.zeros_like(spike_data)
+    for neurons in range(spike_data.shape[0]):
+
+        discrete_data[neurons, :] = modified_equi_binning(spike_data[neurons, :], n_bins=n_bins)
+    return discrete_data
+
+
 def alternate_discretize(spike_data, n_bins=3):
     """
     if the neurons don't fire enough, maybe it makes more sense to just round down the greater>5 ones into a variable
