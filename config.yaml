@@ -1,4 +1,4 @@
-min_units: 3
+min_units: 5
 min_behav_trials: 10
 n_bins: 3
 single_cell_filter: True

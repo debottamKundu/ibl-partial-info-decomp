@@ -25,9 +25,7 @@ from sklearn.ensemble import RandomForestClassifier
 from ibl_info.prepare_data_pid import (
     cleaned_regions_flags,
     get_new_cinc_intervals,
-    get_window,
     prepare_ephys_data,
-    get_congruent_incongruent_intervals,
 )
 from ibl_info.utils import (
     alternate_discretize,
@@ -57,7 +55,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
     )
 
     if session_id is not None:
-        filename = f"./data/processed/singlecellresults/significance_results_{session_id}.csv"
+        filename = f"./data/processed/singlecellsmallwindow//significance_results_{session_id}_smallwindow.csv"
         df = pd.read_csv(filename)
         ccids_significant = df[df["p_value"] <= 0.05]["QC_cluster_id"].values
         mask = np.isin(np.asarray(cluster_uuids_list[0]), ccids_significant)  # type: ignore
@@ -69,18 +67,21 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
         # return empty arrays
         return [0]  # no neurons viable
 
-    spike_data = binned_spikes[0][:, mask].T
+    spike_data = binned_spikes[0].T
     if session_id is not None:
         firing_rate_threshold = 0
         percent_spike = 0
     else:
         firing_rate_threshold = FIRING_RATE[region]
         percent_spike = PERCENT_OF_SPIKE_THRESHOLD
+
     cleaned_neurons = cleaned_regions_flags(
         spike_data,
         firing_rate_threshold=firing_rate_threshold,
         percent_of_no_spikes_threshold=percent_spike,
     )
+
+    cleaned_neurons = cleaned_neurons & mask  # so that it all aligns
 
     return cleaned_neurons
 

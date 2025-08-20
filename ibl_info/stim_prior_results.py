@@ -300,6 +300,7 @@ def regional_pid_results(region_data, region_name, zero_out=False, congruent_id=
     ax[2].set_ylabel("Count")
 
     plt.suptitle(f"{region_name}")
+    ax[0].legend()
 
     plt.tight_layout()
 

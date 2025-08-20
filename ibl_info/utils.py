@@ -1,6 +1,7 @@
 import itertools
 from pathlib import Path
 
+
 import ibl_info.measures.information_measures as info
 import numpy as np
 import yaml
@@ -8,6 +9,22 @@ from brainbox.io.one import SessionLoader
 from brainwidemap import load_good_units
 import pandas as pd
 from tqdm import tqdm
+
+
+def equispaced_binning(values, n_bins=5):
+    """
+    Bin values in [0,1] into equi-spaced bins.
+
+    """
+    values = np.asarray(values)
+    # Create equispaced edges
+    edges = np.linspace(0, 1, n_bins + 1)
+    # Digitize values into bins
+    bin_indices = np.digitize(values, edges, right=False) - 1
+    # Clip to [0, n_bins-1]
+    bin_indices = np.clip(bin_indices, 0, n_bins - 1)
+
+    return bin_indices
 
 
 def equipopulated_binning(signal, n_bins=5):

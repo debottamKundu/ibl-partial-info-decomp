@@ -12,6 +12,7 @@ def process_eid(eid):
     This function contains the core logic for each eid.
     It will be executed by a worker process.
     """
+    one = ONE(base_url="https://openalyx.internationalbrainlab.org", password="international")
     try:
         pids, probes = one.eid2pid(eid)
         for pid in pids:
