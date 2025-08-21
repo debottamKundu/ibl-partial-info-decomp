@@ -106,7 +106,7 @@ def run_for_eid(session_id, regions, epoch="stim"):
     crc_congruent, _ = summary_stats(data_epoch, congruent_flags)
     crc_incongruent, _ = summary_stats(data_epoch, incongruent_flags)
 
-    return crc_all, crc_congruent, crc_incongruent
+    return crc_all, crc_congruent, crc_incongruent, actual_regions
 
 
 def process_session(session_id, save_info):
@@ -141,4 +141,3 @@ def run_wfi(save_info=""):
 
 if __name__ == "__main__":
     run_wfi(save_info="3frames")
- 
