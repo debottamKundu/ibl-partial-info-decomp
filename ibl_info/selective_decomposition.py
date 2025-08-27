@@ -229,9 +229,17 @@ def run_analysis_single_session(
     return information_pickle
 
 
-def filter_eids(unit_df, region):
+def filter_eids(unit_df, region, significant_filter=False):
     unit_df_region = unit_df[unit_df["Beryl"] == region]
     eids = np.unique(unit_df_region["eid"])
+
+    # here we can filter on significant eids
+    if significant_filter:
+        df_stim_decoder = pd.read_parquet(config["pq_location"])
+        df_stim_decoder = df_stim_decoder[df_stim_decoder["region"] == region]
+        significant_dfs = df_stim_decoder[df_stim_decoder["p-value"] < 0.05]
+        eids = np.intersect1d(eids, significant_dfs["eid"].values)
+
     return eids
 
 

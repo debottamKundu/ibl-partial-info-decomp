@@ -66,7 +66,7 @@ def run_flattened(list_of_regions, epoch, discretizer):
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
-        selective_eids = filter_eids(unit_df, region)
+        selective_eids = filter_eids(unit_df, region, significant_filter=config["decoder_filter"])
         for eid in tqdm(selective_eids):
             all_tasks_to_run.append((eid, region, epoch, discretizer))
 
@@ -96,6 +96,11 @@ def run_flattened(list_of_regions, epoch, discretizer):
         suffix = "filtered"
     else:
         suffix = "unfiltered"
+
+    if config["decoder_filter"]:
+        suffix += "_significant"
+    else:
+        suffix += "_all"
 
     if discretizer == 1:
         suffix += "_alternate"

@@ -78,6 +78,7 @@ def split_and_decode(
         outputs1 = np.zeros((n_splits, n_trials), dtype=int)
         outputs2 = np.zeros((n_splits, n_trials), dtype=int)
 
+    accuracies = np.zeros((n_splits, 2))
     loo = LeaveOneOut()
 
     for s in range(n_splits):
@@ -116,16 +117,28 @@ def split_and_decode(
                 out1[test_idx] = clf1.predict(X1[test_idx])
                 out2[test_idx] = clf2.predict(X2[test_idx])
 
+            if return_probs:
+                # Convert probabilities to class labels (using argmax)
+                preds1 = np.argmax(out1, axis=1)
+                preds2 = np.argmax(out2, axis=1)
+            else:
+                preds1 = out1
+                preds2 = out2
+        accuracy1 = accuracy_score(trial_types, preds1)
+        accuracy2 = accuracy_score(trial_types, preds2)
+
+        accuracies[s] = np.asarray([accuracy1, accuracy2])  # type: ignore
+
         outputs1[s] = out1
         outputs2[s] = out2
 
-    return outputs1, outputs2
+    return outputs1, outputs2, accuracies
 
 
-def compute_decoder_pid(target, spikes):
+def compute_decoder_pid(target, spikes, n_bins=2):
 
-    output_a, output_b = split_and_decode(target, spikes)
-
+    output_a, output_b, accuracies = split_and_decode(target, spikes)
+    n_bins = config["n_bins"]
     # output_a is splits x trials x 2
     # we only take probability left ( I think?)
     # probability left is index 1
@@ -135,15 +148,20 @@ def compute_decoder_pid(target, spikes):
 
     repeats = output_a.shape[0]
 
-    pid_array = np.zeros((repeats, 4))
+    pid_array = np.zeros((repeats, 6))
 
     for idx in range(0, repeats):
-        X1 = np.asarray(equispaced_binning(probability_output_a[idx], 4), dtype=np.int32)
-        X2 = np.asarray(equispaced_binning(probability_output_b[idx], 4), dtype=np.int32)
+        X1 = np.asarray(
+            equispaced_binning(probability_output_a[idx], n_bins=n_bins), dtype=np.int32
+        )
+        X2 = np.asarray(
+            equispaced_binning(probability_output_b[idx], n_bins=n_bins), dtype=np.int32
+        )
 
         Y = np.asarray(target, dtype=np.int32)
 
-        pid_array[idx, :] = info.corrected_pid(sourcea=X1, sourceb=X2, target=Y)  # type: ignore # QE
+        pid_array[idx, 0:4] = info.corrected_pid(sourcea=X1, sourceb=X2, target=Y)  # type: ignore # QE
+        pid_array[idx, 4:] = accuracies[idx]
 
     return pid_array
 
@@ -182,7 +200,7 @@ def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder
     # average
     sampled_pid = np.asarray(sampled_pid)
 
-    sampled_pid = np.mean(sampled_pid, axis=0)
+    # sampled_pid = np.mean(sampled_pid, axis=0)
 
     return sampled_pid
 
@@ -349,7 +367,7 @@ def run_flattened(list_of_regions, epoch):
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
-        selective_eids = filter_eids(unit_df, region)
+        selective_eids = filter_eids(unit_df, region, significant_filter=config["decoder_filter"])
         for eid in tqdm(selective_eids):
             all_tasks_to_run.append((eid, region, epoch))
 
