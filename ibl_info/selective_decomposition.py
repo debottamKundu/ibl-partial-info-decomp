@@ -56,10 +56,27 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
     )
 
     if session_id is not None:
-        filename = f"./data/processed/singlecellsmallwindow//significance_results_{session_id}_smallwindow.csv"
-        df = pd.read_csv(filename)
-        ccids_significant = df[df["p_value"] <= 0.05]["QC_cluster_id"].values
-        mask = np.isin(np.asarray(cluster_uuids_list[0]), ccids_significant)  # type: ignore
+
+        if config["single_cell_filter"]:
+
+            if not config["mi_filter"]:
+                filename = f"./data/processed/singlecellsmallwindow//significance_results_{session_id}_smallwindow.csv"
+                df = pd.read_csv(filename)
+                ccids_significant = df[df["p_value"] <= 0.05]["QC_cluster_id"].values
+                mask = np.isin(np.asarray(cluster_uuids_list[0]), ccids_significant)  # type: ignore
+            elif config["mi_filter"]:
+
+                print("MI filter applied")
+                filename = f"./data/processed/cellmi/mi_significant_neurons_{session_id}_stim.pkl"
+                with open(filename, "rb") as f:
+                    mi_data = pkl.load(f)
+                mi_data_region = mi_data[region]
+                ccids = mi_data_region["uuids"]
+                significant = mi_data_region["reject"]
+                mask = np.isin(np.asarray(cluster_uuids_list[0]), np.asarray(ccids)[significant])
+        else:
+            print("No filter applied: shouldn't happen")
+            mask = np.ones(len(cluster_uuids_list[0]), dtype=bool)
     else:
         mask = np.ones(len(cluster_uuids_list[0]), dtype=bool)
         # essentially status quo
@@ -295,7 +312,21 @@ if __name__ == "__main__":
     )
 
     one = ONE()
-    run_selective_decomposition(one, important_regions[0:2], "stim")
+    subject_id = "CSH_ZAD_022"
+    eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
+    session_id = eid
+    ipickle_singlee = run_analysis_single_session(
+        session_id=session_id,
+        one=one,
+        region="LGd",
+        discretize_method=1,
+        epoch="stim",
+        single_cell_filter=config["single_cell_filter"],
+    )
+    with open(f"./data/generated/test_{subject_id}_{session_id}.pkl", "wb") as f:
+        pkl.dump(ipickle_singlee, f)
+
+    # run_selective_decomposition(one, important_regions[0:2], "stim")
 
     # run_selective_decomposition_parallel(important_regions, "stim")
 
