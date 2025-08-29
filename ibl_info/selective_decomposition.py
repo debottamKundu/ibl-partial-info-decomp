@@ -67,7 +67,9 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
             elif config["mi_filter"]:
 
                 print("MI filter applied")
-                filename = f"./data/processed/cellmi/mi_significant_neurons_{session_id}_stim.pkl"
+                filename = (
+                    f"./data/generated/cellmi/mi_significant_neurons_pseudo_{session_id}_stim.pkl"
+                )
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]

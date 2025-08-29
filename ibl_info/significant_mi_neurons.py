@@ -47,6 +47,7 @@ import random
 from ibl_info.utils import check_config
 from statsmodels.stats.multitest import multipletests
 import ibl_info.measures.information_measures as info
+from brainbox.task.closed_loop import generate_pseudo_session
 
 config = check_config()
 
@@ -56,28 +57,47 @@ config = check_config()
 # keep all neurons in the dataset
 
 
-def mi_per_neuron_permuted(spikes, decoding_variable, n_permutations=1000):
+def generate_target(trials_df):
+    stim_side = []
+    for idx in range(len(trials_df)):
+        if trials_df.contrastLeft.iloc[idx] >= 0:
+            stim_side.append(0)
+        else:
+            stim_side.append(1)
+    stim_side = np.asarray(stim_side)
+    return stim_side
+
+
+def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutations=200):
 
     mi_observed = info.corrected_mutual_information(  # type: ignore
         source=spikes, target=decoding_variable, unbiased_measure="plugin"
     )
-
+    # use original permutation statistics
     mi_null = np.zeros(n_permutations)
     for i in range(n_permutations):
-        stim_shuffled = np.random.permutation(decoding_variable)
+
+        # stim_shuffled = np.random.permutation(decoding_variable)
+        # mi_null[i] = info.corrected_mutual_information(  # type: ignore
+        #     source=spikes, target=stim_shuffled, unbiased_measure="plugin"
+        # )
+        pseudo_session = generate_pseudo_session(trials)
+        pseudo_session = pseudo_session[mask]
+        pseudo_targets = generate_target(pseudo_session)
         mi_null[i] = info.corrected_mutual_information(  # type: ignore
-            source=spikes, target=stim_shuffled, unbiased_measure="plugin"
+            source=spikes, target=pseudo_targets, unbiased_measure="plugin"
         )
+
     p_value = (np.sum(mi_null >= mi_observed) + 1) / (n_permutations + 1)  # type: ignore
     return mi_observed, p_value
 
 
-def significant_neurons(spikes, decoding_variable, n_permutations=1000, alpha=0.05):
+def significant_neurons(spikes, decoding_variable, trials, mask, n_permutations=200, alpha=0.05):
 
     mi_data = np.zeros((spikes.shape[0]))
     p_values = np.zeros((spikes.shape[0]))
     for idx in range(len(mi_data)):
-        mi_data[idx], p_values[idx] = mi_per_neuron_permuted(spikes[idx, :], decoding_variable, n_permutations=n_permutations)  # type: ignore
+        mi_data[idx], p_values[idx] = mi_per_neuron_permuted(spikes[idx, :], decoding_variable, trials, mask, n_permutations=n_permutations)  # type: ignore
 
     # do corrections
     reject, pvals_corrected, _, _ = multipletests(p_values, alpha=alpha, method="fdr_bh")
@@ -101,10 +121,11 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
     trials, mask = load_trials_and_mask(
         one, session_id, exclude_nochoice=True, exclude_unbiased=True
     )
-    trials = trials[mask]
+
+    trials_masked = trials[mask]
 
     intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
-        trials, epoch
+        trials_masked, epoch
     )
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
@@ -121,7 +142,7 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
         discretized_spikes = discretize_keeping_zeros(spike_data, n_bins=n_bins)
 
     mi_data, p_values, reject = significant_neurons(
-        discretized_spikes, target_variable, n_permutations=1000, alpha=0.05
+        discretized_spikes, target_variable, trials, mask, n_permutations=1000, alpha=0.05
     )
 
     information_pkl = {}
@@ -197,7 +218,12 @@ def run_flattened(list_of_regions, epoch):
 
     # this will make one huge pickle:
     for eid, eid_pickle in eid_data.items():
-        with open(f"./data/generated/mi_significant_neurons_{eid}_{epoch}.pkl", "wb") as f:
+        with open(f"./data/generated/mi_significant_neurons_pseudo_{eid}_{epoch}.pkl", "wb") as f:
             pkl.dump(eid_pickle, f)
 
     print("Done!")
+
+
+if __name__ == "__main__":
+    important_regions = config["stim_prior_regions"]
+    run_flattened(important_regions, "stim")

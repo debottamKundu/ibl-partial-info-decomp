@@ -128,7 +128,7 @@ def get_new_cinc_intervals(trials_df, decoding_interval):
 
     intervals = np.array([stimon_times + time_window[0], stimon_times + time_window[1]]).T
 
-    # decoding varialbe i.e, stim-side
+    # decoding variable i.e, stim-side
     stim_side = []
     for idx in range(len(trials_df)):
         if left_stim.iloc[idx]:
