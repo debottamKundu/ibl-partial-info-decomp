@@ -18,8 +18,9 @@ from brainwidemap.bwm_loading import merge_probes
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from matplotlib import pyplot as plt
 from one.api import ONE
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import LeaveOneOut
 from sklearn.neural_network import MLPClassifier
 from ibl_info.selective_decomposition import filter_eids
@@ -96,7 +97,7 @@ def split_and_decode(
             out1 = np.zeros(n_trials, dtype=int)
             out2 = np.zeros(n_trials, dtype=int)
 
-        for train_idx, test_idx in loo.split(X1):
+        for train_idx, test_idx in tqdm(loo.split(X1)):
             # Pick decoder
             if decoder == "logreg":
                 clf1 = LogisticRegression(max_iter=500, solver="lbfgs")
@@ -104,6 +105,9 @@ def split_and_decode(
             elif decoder == "svm":
                 clf1 = SVC(kernel="linear", probability=return_probs)
                 clf2 = SVC(kernel="linear", probability=return_probs)
+            elif decoder == "nonlinear":
+                clf1 = SVC(kernel="rbf", probability=return_probs)
+                clf2 = SVC(kernel="rbf", probability=return_probs)
             else:
                 raise ValueError("decoder must be 'logreg' or 'svm'")
 
@@ -124,8 +128,8 @@ def split_and_decode(
             else:
                 preds1 = out1
                 preds2 = out2
-        accuracy1 = accuracy_score(trial_types, preds1)
-        accuracy2 = accuracy_score(trial_types, preds2)
+        accuracy1 = balanced_accuracy_score(trial_types, preds1)
+        accuracy2 = balanced_accuracy_score(trial_types, preds2)
 
         accuracies[s] = np.asarray([accuracy1, accuracy2])  # type: ignore
 
@@ -166,7 +170,7 @@ def compute_decoder_pid(target, spikes, n_bins=2):
     return pid_array
 
 
-def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder=True):
+def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder_pid=True):
 
     left_fraction = np.sum(incongruent_targets == 1) / len(incongruent_targets)
 
@@ -188,14 +192,14 @@ def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder
         selected_indices = np.concatenate((selected_indices_left, selected_indices_right))
         subsampled_targets = congruent_targets[selected_indices]
         subsampled_spikes = congruent_spikes[:, selected_indices]
-        if decoder:
+        if decoder_pid:
             pid_array = compute_decoder_pid(subsampled_targets, subsampled_spikes.T)
             sampled_pid.append(pid_array)
         else:
-            _, _, performance_delta = linear_nonlinear_delta(
+            linear, nonlinear, performance_delta = linear_nonlinear_delta(
                 subsampled_targets, subsampled_spikes.T
             )
-            sampled_pid.append(performance_delta)
+            sampled_pid.append([linear, nonlinear, performance_delta])
 
     # average
     sampled_pid = np.asarray(sampled_pid)
@@ -209,7 +213,7 @@ def linear_nonlinear_delta(
     trial_types,
     neural_activity,
     linear_model="logreg",
-    nonlinear_model="svm_rbf",
+    nonlinear_model="random_forest",
     metric="accuracy",
 ):
     """
@@ -223,7 +227,7 @@ def linear_nonlinear_delta(
         Neural activity per trial.
     linear_model : {"logreg", "svm_linear"}, default="logreg"
         Choice of linear classifier.
-    nonlinear_model : {"svm_rbf", "mlp"}, default="svm_rbf"
+    nonlinear_model : {"svm_rbf", "mlp", "random_forest"}, default="svm_rbf"
         Choice of nonlinear classifier.
     metric : {"accuracy"}, default="accuracy"
         Performance metric to compare.
@@ -247,7 +251,7 @@ def linear_nonlinear_delta(
     for train_idx, test_idx in loo.split(X):
         # ----- Linear model -----
         if linear_model == "logreg":
-            clf_lin = LogisticRegression(max_iter=500, solver="lbfgs")
+            clf_lin = LogisticRegression(max_iter=1000, solver="lbfgs")
         elif linear_model == "svm_linear":
             clf_lin = SVC(kernel="linear")
         else:
@@ -261,16 +265,18 @@ def linear_nonlinear_delta(
             clf_nonlin = SVC(kernel="rbf")
         elif nonlinear_model == "mlp":
             clf_nonlin = MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
+        elif nonlinear_model == "random_forest":
+            clf_nonlin = RandomForestClassifier()
         else:
-            raise ValueError("nonlinear_model must be 'svm_rbf' or 'mlp'")
+            raise ValueError("nonlinear_model must be 'svm_rbf','random_forest' or 'mlp'")
 
         clf_nonlin.fit(X[train_idx], trial_types[train_idx])
         preds_nonlin.append(clf_nonlin.predict(X[test_idx])[0])
 
     # Compute performance
     if metric == "accuracy":
-        perf_lin = accuracy_score(trial_types, preds_linear)
-        perf_nonlin = accuracy_score(trial_types, preds_nonlin)
+        perf_lin = balanced_accuracy_score(trial_types, preds_linear)
+        perf_nonlin = balanced_accuracy_score(trial_types, preds_nonlin)
     else:
         raise ValueError("Only accuracy metric implemented right now.")
 
@@ -321,20 +327,20 @@ def run_decoder_single_session(session_id, epoch, one, region):
     information_pickle["neurons"] = spike_data.shape[0]
     information_pickle["trials"] = trial_count
 
-    information_pickle["incongruent_pid"] = compute_decoder_pid(
-        incongruent_target, incongruent_spikes.T
-    )
+    # information_pickle["incongruent_pid"] = compute_decoder_pid(
+    #     incongruent_target, incongruent_spikes.T
+    # )
 
-    information_pickle["congruent_pid"] = subsampled(
-        congruent_spikes, congruent_target, incongruent_target
-    )
+    # information_pickle["congruent_pid"] = subsampled(
+    #     congruent_spikes, congruent_target, incongruent_target
+    # )
 
     information_pickle["incongruent_delta"] = linear_nonlinear_delta(
         incongruent_target, incongruent_spikes.T
     )
 
     information_pickle["congruent_delta"] = subsampled(
-        congruent_spikes, congruent_target, incongruent_target, decoder=False
+        congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
     )
 
     return information_pickle
@@ -393,7 +399,7 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    suffix = "decoder"
+    suffix = "decoder_good_decoder_sessions_only"
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():

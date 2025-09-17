@@ -68,7 +68,7 @@ def generate_target(trials_df):
     return stim_side
 
 
-def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutations=200):
+def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutations=100):
 
     mi_observed = info.corrected_mutual_information(  # type: ignore
         source=spikes, target=decoding_variable, unbiased_measure="plugin"
@@ -92,7 +92,7 @@ def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutatio
     return mi_observed, p_value
 
 
-def significant_neurons(spikes, decoding_variable, trials, mask, n_permutations=200, alpha=0.05):
+def significant_neurons(spikes, decoding_variable, trials, mask, n_permutations=100, alpha=0.05):
 
     mi_data = np.zeros((spikes.shape[0]))
     p_values = np.zeros((spikes.shape[0]))
