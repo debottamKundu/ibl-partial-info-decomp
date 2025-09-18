@@ -21,7 +21,7 @@ from one.api import ONE
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from sklearn.model_selection import LeaveOneOut
+from sklearn.model_selection import KFold, LeaveOneOut
 from sklearn.neural_network import MLPClassifier
 from ibl_info.selective_decomposition import filter_eids
 from sklearn.svm import SVC
@@ -246,9 +246,11 @@ def linear_nonlinear_delta(
     n_trials = X.shape[0]
 
     loo = LeaveOneOut()
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
     preds_linear, preds_nonlin = [], []
+    y_true = []
 
-    for train_idx, test_idx in loo.split(X):
+    for train_idx, test_idx in kfold.split(X):
         # ----- Linear model -----
         if linear_model == "logreg":
             clf_lin = LogisticRegression(max_iter=1000, solver="lbfgs")
@@ -272,6 +274,7 @@ def linear_nonlinear_delta(
 
         clf_nonlin.fit(X[train_idx], trial_types[train_idx])
         preds_nonlin.append(clf_nonlin.predict(X[test_idx])[0])
+        y_true.append(trial_types[test_idx])
 
     # Compute performance
     if metric == "accuracy":
@@ -327,6 +330,7 @@ def run_decoder_single_session(session_id, epoch, one, region):
     information_pickle["neurons"] = spike_data.shape[0]
     information_pickle["trials"] = trial_count
 
+    # commented out for faster execution, ideally is needed
     # information_pickle["incongruent_pid"] = compute_decoder_pid(
     #     incongruent_target, incongruent_spikes.T
     # )
@@ -335,13 +339,17 @@ def run_decoder_single_session(session_id, epoch, one, region):
     #     congruent_spikes, congruent_target, incongruent_target
     # )
 
-    information_pickle["incongruent_delta"] = linear_nonlinear_delta(
-        incongruent_target, incongruent_spikes.T
-    )
+    # sneaky performance on entire data
+    information_pickle["all_data_delta"] = linear_nonlinear_delta(target_variable, spike_data.T)
 
-    information_pickle["congruent_delta"] = subsampled(
-        congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
-    )
+    # commented out for faster execution, ideally is needed
+    # information_pickle["incongruent_delta"] = linear_nonlinear_delta(
+    #     incongruent_target, incongruent_spikes.T
+    # )
+
+    # information_pickle["congruent_delta"] = subsampled(
+    #     congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
+    # )
 
     return information_pickle
 
@@ -399,7 +407,7 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    suffix = "decoder_good_decoder_sessions_only"
+    suffix = "decoder_alldata_goodsessions"
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():
