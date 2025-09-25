@@ -18,15 +18,23 @@ from brainwidemap.bwm_loading import merge_probes
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from matplotlib import pyplot as plt
 from one.api import ONE
+from sklearn.discriminant_analysis import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from sklearn.model_selection import KFold, LeaveOneOut
+from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut
 from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import Pipeline
 from ibl_info.selective_decomposition import filter_eids
 from sklearn.svm import SVC
 from tqdm import tqdm
-
+import numpy as np
+from sklearn.model_selection import KFold, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.datasets import make_classification
+from sklearn.ensemble import GradientBoostingClassifier
 import ibl_info.measures.information_measures as info
 from ibl_info.prepare_data_pid import get_new_cinc_intervals, prepare_ephys_data
 from ibl_info.utils import check_config, equipopulated_binning, equispaced_binning
@@ -209,81 +217,153 @@ def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder
     return sampled_pid
 
 
-def linear_nonlinear_delta(
-    trial_types,
-    neural_activity,
-    linear_model="logreg",
-    nonlinear_model="random_forest",
-    metric="accuracy",
-):
-    """
-    Compare performance of linear vs nonlinear decoders with LOOCV.
+# def linear_nonlinear_delta(
+#     trial_types,
+#     neural_activity,
+#     linear_model="logreg",
+#     nonlinear_model="random_forest",
+#     metric="accuracy",
+# ):
+#     """
+#     Compare performance of linear vs nonlinear decoders with LOOCV.
 
-    Parameters
-    ----------
-    trial_types : array-like, shape (n_trials,)
-        Labels for each trial.
-    neural_activity : array-like, shape (n_trials, n_neurons)
-        Neural activity per trial.
-    linear_model : {"logreg", "svm_linear"}, default="logreg"
-        Choice of linear classifier.
-    nonlinear_model : {"svm_rbf", "mlp", "random_forest"}, default="svm_rbf"
-        Choice of nonlinear classifier.
-    metric : {"accuracy"}, default="accuracy"
-        Performance metric to compare.
+#     Parameters
+#     ----------
+#     trial_types : array-like, shape (n_trials,)
+#         Labels for each trial.
+#     neural_activity : array-like, shape (n_trials, n_neurons)
+#         Neural activity per trial.
+#     linear_model : {"logreg", "svm_linear"}, default="logreg"
+#         Choice of linear classifier.
+#     nonlinear_model : {"svm_rbf", "mlp", "random_forest"}, default="svm_rbf"
+#         Choice of nonlinear classifier.
+#     metric : {"accuracy"}, default="accuracy"
+#         Performance metric to compare.
 
-    Returns
-    -------
-    perf_linear : float
-        Performance of linear model.
-    perf_nonlinear : float
-        Performance of nonlinear model.
-    diff : float
-        Difference (nonlinear - linear).
-    """
-    trial_types = np.asarray(trial_types)
+#     Returns
+#     -------
+#     perf_linear : float
+#         Performance of linear model.
+#     perf_nonlinear : float
+#         Performance of nonlinear model.
+#     diff : float
+#         Difference (nonlinear - linear).
+#     """
+#     trial_types = np.asarray(trial_types)
+#     X = np.asarray(neural_activity)
+#     n_trials = X.shape[0]
+
+#     loo = LeaveOneOut()
+#     # kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+#     preds_linear, preds_nonlin = [], []
+#     y_true = []
+
+#     for train_idx, test_idx in loo.split(X):
+#         # ----- Linear model -----
+#         if linear_model == "logreg":
+#             clf_lin = LogisticRegression(max_iter=1000, solver="lbfgs")
+#         elif linear_model == "svm_linear":
+#             clf_lin = SVC(kernel="linear")
+#         else:
+#             raise ValueError("linear_model must be 'logreg' or 'svm_linear'")
+
+#         clf_lin.fit(X[train_idx], trial_types[train_idx])
+#         preds_linear.append(clf_lin.predict(X[test_idx])[0])
+
+#         # ----- Nonlinear model -----
+#         if nonlinear_model == "svm_rbf":
+#             clf_nonlin = SVC(kernel="rbf")
+#         elif nonlinear_model == "mlp":
+#             clf_nonlin = MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
+#         elif nonlinear_model == "random_forest":
+#             clf_nonlin = RandomForestClassifier()
+#         else:
+#             raise ValueError("nonlinear_model must be 'svm_rbf','random_forest' or 'mlp'")
+
+#         clf_nonlin.fit(X[train_idx], trial_types[train_idx])
+#         preds_nonlin.append(clf_nonlin.predict(X[test_idx])[0])
+#         y_true.append(trial_types[test_idx])
+
+#     # Compute performance
+#     if metric == "accuracy":
+#         perf_lin = balanced_accuracy_score(trial_types, preds_linear)
+#         perf_nonlin = balanced_accuracy_score(trial_types, preds_nonlin)
+#     else:
+#         raise ValueError("Only accuracy metric implemented right now.")
+
+#     return perf_lin, perf_nonlin, perf_nonlin - perf_lin
+
+
+def linear_nonlinear_delta(trial_types, neural_activity, scale_features=False):
+
+    y = np.asarray(trial_types)
     X = np.asarray(neural_activity)
-    n_trials = X.shape[0]
 
-    loo = LeaveOneOut()
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-    preds_linear, preds_nonlin = [], []
-    y_true = []
+    N_SPLITS_OUTER = 5
+    N_SPLITS_INNER = 3
 
-    for train_idx, test_idx in kfold.split(X):
-        # ----- Linear model -----
-        if linear_model == "logreg":
-            clf_lin = LogisticRegression(max_iter=1000, solver="lbfgs")
-        elif linear_model == "svm_linear":
-            clf_lin = SVC(kernel="linear")
-        else:
-            raise ValueError("linear_model must be 'logreg' or 'svm_linear'")
+    print("LogReg vs GradientBoosting")
 
-        clf_lin.fit(X[train_idx], trial_types[train_idx])
-        preds_linear.append(clf_lin.predict(X[test_idx])[0])
+    steps = [("scaler", StandardScaler())] if scale_features else []
 
-        # ----- Nonlinear model -----
-        if nonlinear_model == "svm_rbf":
-            clf_nonlin = SVC(kernel="rbf")
-        elif nonlinear_model == "mlp":
-            clf_nonlin = MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
-        elif nonlinear_model == "random_forest":
-            clf_nonlin = RandomForestClassifier()
-        else:
-            raise ValueError("nonlinear_model must be 'svm_rbf','random_forest' or 'mlp'")
+    linear_pipeline = Pipeline(
+        steps
+        + [("classifier", LogisticRegression(penalty="l1", solver="liblinear", random_state=42))]
+    )
+    linear_param_grid = {
+        "classifier__C": [0.01, 0.1, 1, 10, 100]  # C is the inverse of regularization strength
+    }
 
-        clf_nonlin.fit(X[train_idx], trial_types[train_idx])
-        preds_nonlin.append(clf_nonlin.predict(X[test_idx])[0])
-        y_true.append(trial_types[test_idx])
+    nonlinear_pipeline = Pipeline(
+        steps + [("classifier", GradientBoostingClassifier(random_state=42))]
+    )
 
-    # Compute performance
-    if metric == "accuracy":
-        perf_lin = balanced_accuracy_score(trial_types, preds_linear)
-        perf_nonlin = balanced_accuracy_score(trial_types, preds_nonlin)
-    else:
-        raise ValueError("Only accuracy metric implemented right now.")
+    nonlinear_param_grid = {
+        "classifier__n_estimators": [50, 100],  # Number of boosting stages
+        "classifier__learning_rate": [0.01, 0.1, 0.2],  # Shrinks the contribution of each tree
+        "classifier__max_depth": [2, 3, 4],  # Constrain complexity of individual trees
+        "classifier__subsample": [0.7, 0.9, 1.0],  # Use a fraction of data for fitting trees
+    }
+    outer_cv = KFold(n_splits=N_SPLITS_OUTER, shuffle=True, random_state=42)
+    inner_cv = KFold(n_splits=N_SPLITS_INNER, shuffle=True, random_state=42)
 
-    return perf_lin, perf_nonlin, perf_nonlin - perf_lin
+    linear_scores = []
+    nonlinear_scores = []
+
+    for i, (train_idx, test_idx) in enumerate(outer_cv.split(X, y)):
+        X_train_outer, X_test_outer = X[train_idx], X[test_idx]
+        y_train_outer, y_test_outer = y[train_idx], y[test_idx]
+
+        grid_search_linear = GridSearchCV(
+            estimator=linear_pipeline,
+            param_grid=linear_param_grid,
+            cv=inner_cv,
+            scoring="accuracy",
+        )
+        grid_search_linear.fit(X_train_outer, y_train_outer)
+        best_linear_model = grid_search_linear.best_estimator_
+
+        grid_search_nonlinear = GridSearchCV(
+            estimator=nonlinear_pipeline,
+            param_grid=nonlinear_param_grid,
+            cv=inner_cv,
+            scoring="accuracy",
+        )
+
+        grid_search_nonlinear.fit(X_train_outer, y_train_outer)
+        best_nonlinear_model = grid_search_nonlinear.best_estimator_
+
+        linear_accuracy = best_linear_model.score(X_test_outer, y_test_outer)
+        nonlinear_accuracy = best_nonlinear_model.score(X_test_outer, y_test_outer)
+
+        linear_scores.append(linear_accuracy)
+        nonlinear_scores.append(nonlinear_accuracy)
+
+    linear_scores = np.asarray(linear_scores)
+    nonlinear_scores = np.asarray(nonlinear_scores)
+    difference = linear_scores - nonlinear_scores
+
+    return linear_scores, nonlinear_scores, difference
 
 
 def run_decoder_single_session(session_id, epoch, one, region):
@@ -343,13 +423,13 @@ def run_decoder_single_session(session_id, epoch, one, region):
     information_pickle["all_data_delta"] = linear_nonlinear_delta(target_variable, spike_data.T)
 
     # commented out for faster execution, ideally is needed
-    # information_pickle["incongruent_delta"] = linear_nonlinear_delta(
-    #     incongruent_target, incongruent_spikes.T
-    # )
+    information_pickle["incongruent_delta"] = linear_nonlinear_delta(
+        incongruent_target, incongruent_spikes.T
+    )
 
-    # information_pickle["congruent_delta"] = subsampled(
-    #     congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
-    # )
+    information_pickle["congruent_delta"] = subsampled(
+        congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
+    )
 
     return information_pickle
 
@@ -407,7 +487,7 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    suffix = "decoder_alldata_goodsessions"
+    suffix = "decoder_alldata_goodsessions_boosters"
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():
