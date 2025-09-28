@@ -302,14 +302,17 @@ def linear_nonlinear_delta(trial_types, neural_activity, scale_features=True):
     N_SPLITS_OUTER = 5
     N_SPLITS_INNER = 3
 
-    print("LogReg vs SVMs")
+    # print("LogReg vs SVMs")
 
     steps = [("scaler", StandardScaler())] if scale_features else []
 
     linear_pipeline = Pipeline(
         steps
         + [
-            ("classifier", LogisticRegression(penalty="l1", solver="saga", random_state=42))
+            (
+                "classifier",
+                LogisticRegression(penalty="l1", solver="saga", random_state=42, max_iter=1000),
+            )
         ]  # liblinear doesn't converge
     )
     linear_param_grid = {

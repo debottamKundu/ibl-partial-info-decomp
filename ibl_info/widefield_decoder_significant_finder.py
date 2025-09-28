@@ -19,6 +19,7 @@ import os
 from ibl_info.decoder_pid import linear_nonlinear_delta
 from statsmodels.stats.multitest import multipletests
 import ibl_info.measures.information_measures as info
+import warnings
 
 config = check_config()
 
@@ -120,7 +121,7 @@ def wfi_linear_nonlinear_significant(session_id, regions, epoch="stim"):
     congruent_region_scores = {}
     incongruent_region_scores = {}
     all_region_scores = {}
-    for region_idx in data_to_keep[0]:  # weird but whatevers
+    for region_idx in tqdm(data_to_keep[0]):  # weird but whatevers
         region_data = data_epoch[region_idx].transpose(1, 0, 2)  # type: ignore
         # do this for only frame 1
         llscores, nlscores, diffs = scores_per_region(
@@ -209,4 +210,5 @@ def run_wfi(save_info=""):
 
 
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore")
     run_wfi(save_info="4bins")
