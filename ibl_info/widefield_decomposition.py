@@ -16,6 +16,7 @@ from ibl_info.measures import information_measures as info
 import pickle as pkl
 from tqdm import tqdm
 import os
+from ibl_info.decoder_pid import linear_nonlinear_delta
 
 config = check_config()
 
@@ -276,7 +277,7 @@ def process_session(session_id, save_info):
     ]
     # also use regions = "single_regions" to use all
     try:
-        region_pickle = wfi_by_eid(session_id, regions=significant_regions, epoch="stim")
+        region_pickle = wfi_by_eid(session_id, regions="single_regions", epoch="stim")
         with open(f"./data/generated/{session_id}_wfi_{save_info}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
         return 1

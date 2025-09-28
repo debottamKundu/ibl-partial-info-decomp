@@ -294,7 +294,7 @@ def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder
 #     return perf_lin, perf_nonlin, perf_nonlin - perf_lin
 
 
-def linear_nonlinear_delta(trial_types, neural_activity, scale_features=False):
+def linear_nonlinear_delta(trial_types, neural_activity, scale_features=True):
 
     y = np.asarray(trial_types)
     X = np.asarray(neural_activity)
@@ -302,28 +302,65 @@ def linear_nonlinear_delta(trial_types, neural_activity, scale_features=False):
     N_SPLITS_OUTER = 5
     N_SPLITS_INNER = 3
 
-    print("LogReg vs GradientBoosting")
+    print("LogReg vs SVMs")
 
     steps = [("scaler", StandardScaler())] if scale_features else []
 
     linear_pipeline = Pipeline(
         steps
-        + [("classifier", LogisticRegression(penalty="l1", solver="liblinear", random_state=42))]
+        + [
+            ("classifier", LogisticRegression(penalty="l1", solver="saga", random_state=42))
+        ]  # liblinear doesn't converge
     )
     linear_param_grid = {
         "classifier__C": [0.01, 0.1, 1, 10, 100]  # C is the inverse of regularization strength
     }
 
+    # nonlinear_pipeline = Pipeline(
+    #     steps + [("classifier", GradientBoostingClassifier(random_state=42))]
+    # )
+
+    # nonlinear_param_grid = {
+    #     "classifier__n_estimators": [50, 100],  # Number of boosting stages
+    #     "classifier__learning_rate": [0.01, 0.05, 0.1],  # Shrinks the contribution of each tree
+    #     "classifier__min_samples_leaf": [5, 10],
+    #     "classifier__max_depth": [2, 3, 4],  # Constrain complexity of individual trees
+    #     "classifier__subsample": [0.6, 0.7, 0.8],  # Use a fraction of data for fitting trees
+    # }
+
     nonlinear_pipeline = Pipeline(
-        steps + [("classifier", GradientBoostingClassifier(random_state=42))]
+        [("scaler", StandardScaler()), ("classifier", SVC(kernel="rbf", random_state=42))]
     )
 
-    nonlinear_param_grid = {
-        "classifier__n_estimators": [50, 100],  # Number of boosting stages
-        "classifier__learning_rate": [0.01, 0.1, 0.2],  # Shrinks the contribution of each tree
-        "classifier__max_depth": [2, 3, 4],  # Constrain complexity of individual trees
-        "classifier__subsample": [0.7, 0.9, 1.0],  # Use a fraction of data for fitting trees
-    }
+    # --- Define a Hyperparameter Grid to Control Overfitting ---
+    # We search for the best combination of C and gamma.
+    # A smaller C or a smaller gamma leads to a simpler, more regularized model.
+    # nonlinear_pipeline_param_grid = {
+    #     "classifier__C": [0.1, 1, 10, 100],
+    #     "classifier__gamma": ["scale", "auto", 0.01, 0.1],
+    # }
+    nonlinear_param_grid = [
+        # Dictionary 1: For the RBF (Radial Basis Function) kernel
+        {
+            "classifier__kernel": ["rbf"],
+            "classifier__C": [0.1, 1, 10, 100],
+            "classifier__gamma": ["scale", "auto", 0.01, 0.1],
+        },
+        # Dictionary 2: For the Polynomial kernel
+        {
+            "classifier__kernel": ["poly"],
+            "classifier__C": [0.1, 1, 10],
+            "classifier__degree": [2, 3, 4],  # The degree of the polynomial
+            "classifier__gamma": ["scale", "auto"],
+        },
+        # Dictionary 3: For the Sigmoid kernel
+        {
+            "classifier__kernel": ["sigmoid"],
+            "classifier__C": [0.1, 1, 10],
+            "classifier__gamma": ["scale", "auto"],
+        },
+    ]
+
     outer_cv = KFold(n_splits=N_SPLITS_OUTER, shuffle=True, random_state=42)
     inner_cv = KFold(n_splits=N_SPLITS_INNER, shuffle=True, random_state=42)
 
