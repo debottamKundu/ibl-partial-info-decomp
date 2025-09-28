@@ -115,7 +115,7 @@ def wfi_linear_nonlinear_significant(session_id, regions, epoch="stim"):
             regions_to_keep[idx] = 1
     regions_to_keep = np.asarray(regions_to_keep, dtype=np.bool)
     data_to_keep = np.where(regions_to_keep == 1)
-    regions_used = np.asarray(actual_regions)[regions_to_keep]
+    regions_used = np.asarray(actual_regions)  # just numpying it
 
     # do this for all regions, will take forever anyways
     congruent_region_scores = {}
@@ -139,7 +139,7 @@ def wfi_linear_nonlinear_significant(session_id, regions, epoch="stim"):
 
     # now we do the single cell mi thing
     region_specific_mi = {}
-    for region_idx in data_to_keep[0]:  # weird but whatevers
+    for region_idx in tqdm(data_to_keep[0]):  # weird but whatevers
         region_data = data_epoch[region_idx].transpose(1, 0, 2)  # type: ignore
         frx_n = []
         for frx in range(3):
@@ -197,14 +197,14 @@ def run_wfi(save_info=""):
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
 
     # we will parallelize this
-    # process_session(sessions[0], save_info)  # type: ignore
+    process_session(sessions[0], save_info)  # type: ignore
     # run this commented out thing to see if it works
 
-    n_cores = os.cpu_count() % 2  # type: ignore
+    # n_cores = os.cpu_count() % 2  # type: ignore
 
-    results = Parallel(n_jobs=n_cores, verbose=10)(
-        delayed(process_session)(session_id, save_info) for session_id in sessions  # type: ignore
-    )
+    # results = Parallel(n_jobs=n_cores, verbose=10)(
+    #     delayed(process_session)(session_id, save_info) for session_id in sessions  # type: ignore
+    # )
 
     # save this before
 
