@@ -189,7 +189,6 @@ def process_session(session_id, save_info):
         print(f"{e}, for eid {session_id}")
         return -1
 
-
 def run_wfi(save_info=""):
 
     one = ONE()
