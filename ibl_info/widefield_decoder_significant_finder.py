@@ -62,7 +62,7 @@ def scores_per_region(region_data, target, flags):
     NLScores = []
     Diffs = []
     # for frame_idx in tqdm(range(3)):
-    frame_idx = 1
+    frame_idx = 1  # should have probably done this for 2.
     frame_data = region_data[frame_idx]
     flagged_targets = target[flags]
     linear_scores, nonlinear_scores, difference = linear_nonlinear_delta(
@@ -188,6 +188,7 @@ def process_session(session_id, save_info):
     except Exception as e:
         print(f"{e}, for eid {session_id}")
         return -1
+
 
 def run_wfi(save_info=""):
 
