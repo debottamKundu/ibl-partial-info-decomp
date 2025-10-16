@@ -406,6 +406,15 @@ def linear_nonlinear_delta(trial_types, neural_activity, scale_features=True):
     return linear_scores, nonlinear_scores, difference
 
 
+def linear_nonlinear_r2(trial_types, neural_activity, scale_features=True):
+
+    ## implement this
+    ## l1 lasso r2
+    ## random forest r2
+    ## use similar logic as that of ibl
+    return NotImplementedError
+
+
 def run_decoder_single_session(session_id, epoch, one, region):
 
     pids, probes = one.eid2pid(session_id)
