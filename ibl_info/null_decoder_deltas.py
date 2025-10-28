@@ -372,7 +372,7 @@ if __name__ == "__main__":
     # save this for each region
 
     # --- Run Full Analysis ---
-    all_results = run_analysis_in_parallel(all_mice_data, models_to_run, config)
+    # TODO: fix this
 
     # You can also save your results to a file for later plotting/analysis
     # import pandas as pd
