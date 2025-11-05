@@ -143,96 +143,6 @@ def get_new_cinc_intervals(trials_df, decoding_interval):
     return intervals, stim_side, congruency_flags, incongruency_flags
 
 
-def get_congruent_incongruent_intervals(trials_df, decoding_interval):
-
-    time_window = get_window(decoding_interval)
-    all_contrasts = [1, 0.25, 0.125, 0.0625, 0]
-    low_contrasts = [0.0625, 0.125, 0.25]  # 0 is essentially random yeah.
-
-    # let's assume all is stimulus interval for now
-
-    left_stim_trials = trials_df[trials_df.contrastLeft >= 0]
-    right_stim_trials = trials_df[trials_df.contrastRight >= 0]
-
-    congruent_left = trials_df[(trials_df.contrastLeft >= 0) & (trials_df.probabilityLeft == 0.8)]
-    congruent_right = trials_df[
-        (trials_df.contrastRight >= 0) & (trials_df.probabilityLeft == 0.2)
-    ]
-    incongruent_left = trials_df[
-        (trials_df.contrastLeft >= 0) & (trials_df.probabilityLeft == 0.2)
-    ]
-    incongruent_right = trials_df[
-        (trials_df.contrastRight >= 0) & (trials_df.probabilityLeft == 0.8)
-    ]
-
-    congruent = pd.concat([congruent_left, congruent_right])
-    incongruent = pd.concat([incongruent_left, incongruent_right])
-
-    middling_incongruent = incongruent[
-        (incongruent.contrastLeft.isin(low_contrasts))
-        | (incongruent.contrastRight.isin(low_contrasts))
-    ]
-
-    # now to get all the intervals
-
-    # for all trials
-    stimon_times_all = np.concatenate(
-        [left_stim_trials.stimOn_times.values, right_stim_trials.stimOn_times.values]
-    )
-    decoding_variable_all = np.concatenate(
-        [np.ones((left_stim_trials.shape[0])), 0 * np.ones((right_stim_trials.shape[0]))]
-    )
-
-    # for congruent trials
-
-    stimon_times_congruent = congruent.stimOn_times.values
-    decoding_variable_congruent = np.concatenate(
-        [np.ones((congruent_left.shape[0])), 0 * np.ones((congruent_right.shape[0]))]
-    )
-
-    # for incongruent trials
-
-    stimon_times_incongruent = incongruent.stimOn_times.values
-    decoding_variable_incongruent = np.concatenate(
-        [np.ones((incongruent_left.shape[0])), 0 * np.ones((incongruent_right.shape[0]))]
-    )
-
-    # for middling incongruent trials
-    stimon_times_middling = middling_incongruent.stimOn_times.values
-    decoding_variable_middling = np.concatenate(
-        [
-            np.ones(np.sum(middling_incongruent.probabilityLeft == 0.2)),
-            0 * np.ones(np.sum(middling_incongruent.probabilityLeft == 0.8)),
-        ]
-    )
-
-    intervals_all = np.array(
-        [stimon_times_all + time_window[0], stimon_times_all + time_window[1]]
-    ).T
-
-    intervals_congruent = np.array(
-        [stimon_times_congruent + time_window[0], stimon_times_congruent + time_window[1]]  # type: ignore
-    ).T
-
-    intervals_incongruent = np.array(
-        [stimon_times_incongruent + time_window[0], stimon_times_incongruent + time_window[1]]  # type: ignore
-    ).T
-
-    intervals_middling = np.array(
-        [stimon_times_middling + time_window[0], stimon_times_middling + time_window[1]]  # type: ignore
-    ).T
-
-    # NOTE: removed the middling ones
-    return (
-        [intervals_all, intervals_congruent, intervals_incongruent],
-        [
-            decoding_variable_all,
-            decoding_variable_congruent,
-            decoding_variable_incongruent,
-        ],
-    )
-
-
 def cleaned_regions_flags(
     region_data, percent_of_no_spikes_threshold=0.4, firing_rate_threshold=1.0, window=[0, 0.1]
 ):
@@ -251,43 +161,38 @@ def cleaned_regions_flags(
     return keep_flag
 
 
-def old_cleaner(
-    region_data, percent_of_no_spikes_threshold=0.2, firing_rate_threshold=0, plot=False
-):
+def get_new_cinc_intervals_choice(trials_df, decoding_interval="choice"):
 
-    # we are not using the firing rate threshold at the moment
-    # otherwise we can throw away neurons that fall below a certain percentage of the mean firing rate
-    # code not here
-    # we pass in regional data here anyways
-    # differs from old function signature
-    array_no_nans = region_data[~np.isnan(region_data).any(axis=1)]
-    array_no_zeros = array_no_nans[~np.all(array_no_nans == 0, axis=1)]
-    num_zeros = np.sum(array_no_zeros == 0, axis=1) / array_no_zeros.shape[1]
-    keep_neurons = num_zeros <= 1 - percent_of_no_spikes_threshold
-    array_filtered = array_no_zeros[keep_neurons]
+    time_window = get_window(decoding_interval)
 
-    thrown_away_neurons = np.where(~keep_neurons)[0]
+    left_stim = trials_df.contrastLeft >= 0
+    right_stim = trials_df.contrastRight >= 0
 
-    if plot:
-        fig, ax = plt.subplots(figsize=(5, 5))
+    left_block = trials_df.probabilityLeft == 0.8
+    right_block = trials_df.probabilityLeft == 0.2
 
-        sns.heatmap(region_data, ax=ax, cmap="Greys")
-        ax.set_title("cleaned")
-        yticklabels = ax.get_yticklabels()
-        for i, label in enumerate(yticklabels):
-            if i in thrown_away_neurons:
-                label.set_color("red")
-        y_coordinates = np.arange(region_data.shape[0] + 1)
+    congruent_left = left_stim & left_block
+    congruent_right = right_stim & right_block
 
-        xmin, xmax = ax.get_xlim()
+    incongruent_left = left_stim & right_block
+    incongruent_right = right_stim & left_block
 
-        ax.hlines(
-            y=y_coordinates,
-            xmin=xmin,
-            xmax=xmax,
-            colors="black",
-            linestyles="solid",
-            lw=1,
-        )
+    choice_times = trials_df["firstMovement_times"].values
 
-    return array_filtered
+    intervals = np.array([choice_times + time_window[0], choice_times + time_window[1]]).T
+
+    # decoding variable, i/e, choice
+
+    choice_side = []
+    for idx in range(len(trials_df)):
+        if trials_df.iloc[idx]["choice"] == -1:
+            choice_side.append(0)
+        elif trials_df.iloc[idx]["choice"] == 1:
+            choice_side.append(1)
+
+    choice_side = np.asarray(choice_side)
+
+    congruency_flags = congruent_left | congruent_right
+    incongruency_flags = incongruent_left | incongruent_right
+
+    return intervals, choice_side, congruency_flags, incongruency_flags

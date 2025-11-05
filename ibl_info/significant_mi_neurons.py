@@ -27,6 +27,7 @@ from sklearn.ensemble import RandomForestClassifier
 from ibl_info.prepare_data_pid import (
     cleaned_regions_flags,
     get_new_cinc_intervals,
+    get_new_cinc_intervals_choice,
     prepare_ephys_data,
 )
 from ibl_info.selective_decomposition import filter_eids
@@ -77,16 +78,16 @@ def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutatio
     mi_null = np.zeros(n_permutations)
     for i in range(n_permutations):
 
-        # stim_shuffled = np.random.permutation(decoding_variable)
-        # mi_null[i] = info.corrected_mutual_information(  # type: ignore
-        #     source=spikes, target=stim_shuffled, unbiased_measure="plugin"
-        # )
-        pseudo_session = generate_pseudo_session(trials)
-        pseudo_session = pseudo_session[mask]
-        pseudo_targets = generate_target(pseudo_session)
+        stim_shuffled = np.random.permutation(decoding_variable)
         mi_null[i] = info.corrected_mutual_information(  # type: ignore
-            source=spikes, target=pseudo_targets, unbiased_measure="plugin"
+            source=spikes, target=stim_shuffled, unbiased_measure="plugin"
         )
+        # pseudo_session = generate_pseudo_session(trials)
+        # pseudo_session = pseudo_session[mask]
+        # pseudo_targets = generate_target(pseudo_session)
+        # mi_null[i] = info.corrected_mutual_information(  # type: ignore
+        #     source=spikes, target=pseudo_targets, unbiased_measure="plugin"
+        # )
 
     p_value = (np.sum(mi_null >= mi_observed) + 1) / (n_permutations + 1)  # type: ignore
     return mi_observed, p_value
@@ -124,9 +125,16 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
 
     trials_masked = trials[mask]
 
-    intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
-        trials_masked, epoch
-    )
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials_masked, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials_masked, epoch)
+        )
+    else:
+        raise NotImplementedError
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=1
@@ -203,22 +211,8 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             eid_data[eid][region] = information_pickle
 
-    # if config["decoder_filter"]:
-    #     suffix = "_better_sessions"
-    # else:
-    #     suffix = "_all_sessions"
-
-    # if config["discretize"] == 1:
-    #     suffix += "_alternate"
-    # else:
-    #     suffix += "_equipopulated"
-
-    # n_bins = config["n_bins"]
-    # suffix += f"_{n_bins}"
-
-    # this will make one huge pickle:
     for eid, eid_pickle in eid_data.items():
-        with open(f"./data/generated/mi_significant_neurons_pseudo_{eid}_{epoch}.pkl", "wb") as f:
+        with open(f"./data/generated/mi_significant_neurons_choice_{eid}_{epoch}.pkl", "wb") as f:
             pkl.dump(eid_pickle, f)
 
     print("Done!")
@@ -226,4 +220,4 @@ def run_flattened(list_of_regions, epoch):
 
 if __name__ == "__main__":
     important_regions = config["stim_prior_regions"]
-    run_flattened(important_regions, "stim")
+    run_flattened(important_regions, "choice")

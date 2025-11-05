@@ -1,0 +1,41 @@
+
+# .15 = dark_gray
+# .8 = light_gray
+
+text.color: .15
+axes.labelcolor: .15
+legend.frameon: False
+legend.numpoints: 1
+legend.scatterpoints: 1
+xtick.direction: out
+ytick.direction: out
+xtick.color: .15
+ytick.color: .15
+axes.axisbelow: True
+grid.linestyle: -
+lines.solid_capstyle: round
+lines.markersize: 10
+axes.prop_cycle: cycler('color',   ['89B4FA','E6A0C4', 'C6CDF7', 'D8A499', '7294D4'])
+
+axes.grid: True
+axes.facecolor: white
+axes.edgecolor: black
+axes.linewidth: 1
+grid.color: white
+xtick.major.size: 5
+ytick.major.size: 5
+xtick.minor.size: 5
+ytick.minor.size: 5
+axes.spines.top: False
+axes.spines.right: False
+xtick.labelsize: 14
+ytick.labelsize: 14
+axes.labelsize: 18
+axes.titlesize: 18
+figure.facecolor: white
+
+
+# Custom
+font.family: sans-serif
+font.sans-serif: Helvetica, Bitstream Vera Sans, Lucida Grande, Verdana, Geneva, Lucid, Arial, Helvetica, Avant Garde, sans-serif
+image.cmap: RdPu
