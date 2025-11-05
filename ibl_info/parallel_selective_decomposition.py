@@ -40,7 +40,11 @@ def prepare_and_run_data(task_tuple):
 
     eid, region, epoch, discretizer = task_tuple
     single_cell_filter = config["single_cell_filter"]
-    one = ONE()
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = run_analysis_single_session(
@@ -62,7 +66,11 @@ def prepare_and_run_data(task_tuple):
 
 def run_flattened(list_of_regions, epoch, discretizer):
 
-    one = ONE()
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
@@ -151,7 +159,7 @@ if __name__ == "__main__":
     ]
 
     discretizer = config["discretize"]
-    run_flattened(important_regions, "stim", discretizer=discretizer)
+    run_flattened(important_regions, "choice", discretizer=discretizer)
     # 1 is the alternate method
     # can i somehow use the nbins?
 

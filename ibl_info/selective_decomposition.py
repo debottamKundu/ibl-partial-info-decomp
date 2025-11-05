@@ -25,6 +25,7 @@ from sklearn.ensemble import RandomForestClassifier
 from ibl_info.prepare_data_pid import (
     cleaned_regions_flags,
     get_new_cinc_intervals,
+    get_new_cinc_intervals_choice,
     prepare_ephys_data,
 )
 from ibl_info.utils import (
@@ -67,9 +68,12 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
             elif config["mi_filter"]:
 
                 print("MI filter applied")
-                filename = (
-                    f"./data/generated/cellmi/mi_significant_neurons_pseudo_{session_id}_stim.pkl"
-                )
+                # change this here
+                if config["epoch"] == "stim":
+                    filename = f"./data/generated/cellmi/mi_significant_neurons_pseudo_{session_id}_stim.pkl"
+                elif config["epoch"] == "choice":
+                    filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
+
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]
@@ -183,9 +187,16 @@ def run_analysis_single_session(
     )
     trials = trials[mask]
 
-    intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
-        trials, epoch
-    )
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials, epoch)
+        )
+    else:
+        raise NotImplementedError
 
     trial_count = np.zeros((3))
 
