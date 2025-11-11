@@ -196,3 +196,36 @@ def get_new_cinc_intervals_choice(trials_df, decoding_interval="choice"):
     incongruency_flags = incongruent_left | incongruent_right
 
     return intervals, choice_side, congruency_flags, incongruency_flags
+
+
+def return_significant_cells(eid, epoch, cluster_ids):
+
+    if epoch == "stim":
+        df_epoch = pd.read_csv("../data/external/bwm_single_cell_stim_2024_10_21.csv")
+    elif epoch == "choice":
+        df_epoch = pd.read_csv("../data/external/bwm_single_cell_choice_2024_10_21.csv")
+    else:
+        raise NotImplementedError
+
+    compact_df_stim = df_epoch[df_epoch.eid == eid]
+    truncated_df = compact_df_stim[compact_df_stim["cluster_id"].isin(cluster_ids[0])]
+
+    boolean_array = np.zeros(len(cluster_ids[0]), dtype=bool)
+
+    for idx in range(len(cluster_ids[0])):
+
+        xdf = truncated_df[truncated_df["cluster_id"] == cluster_ids[0][idx]]
+
+        if len(xdf) == 0:
+            boolean_array[idx] = False
+        else:
+            if epoch == "stim":
+                xdf_pval = xdf.p_value_stim
+            elif epoch == "choice":
+                xdf_pval = xdf.p_value_choice
+            if xdf_pval.iloc[0] <= 0.05:
+                boolean_array[idx] = True
+            else:
+                boolean_array[idx] = False
+
+    return boolean_array

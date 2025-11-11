@@ -27,6 +27,7 @@ from ibl_info.prepare_data_pid import (
     get_new_cinc_intervals,
     get_new_cinc_intervals_choice,
     prepare_ephys_data,
+    return_significant_cells,
 )
 from ibl_info.utils import (
     alternate_discretize,
@@ -208,19 +209,22 @@ def run_analysis_single_session(
 
     # find the neurons to be used:
     # for all
-    if single_cell_filter:
-        neuron_flags = select_neurons_for_analysis_all(
-            spikes, clusters, intervals, region, session_id=session_id
-        )
-    else:
-        neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
-    if np.sum(neuron_flags) < 2:
-        return information_pickle
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=3
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
+    if single_cell_filter:
+
+        # use new function with bwm single cells
+        neuron_flags = return_significant_cells(session_id, epoch, cluster_uuids_list)
+        # neuron_flags = select_neurons_for_analysis_all(
+        #     spikes, clusters, intervals, region, session_id=session_id
+        # )
+    else:
+        neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
+    if np.sum(neuron_flags) < 2:
+        return information_pickle
 
     # we want neurons x trials
     spike_data = binned_spikes[0].T

@@ -312,8 +312,8 @@ def regional_pid_results(region_data, region_name, zero_out=False, congruent_id=
     filelocation = Path(__file__).parent.parent.joinpath(
         f"reports/figures/region_pid/{region_name}_{congruent_id}_{info}.png"
     )
-    plt.savefig(filelocation, bbox_inches="tight", facecolor="white")
-    plt.close()
+    # plt.savefig(filelocation, bbox_inches="tight", facecolor="white")
+    # plt.close()
 
     synergy_delta = means_pid[1, 3] - means_pid[2, 3]
     redundancy_delta = means_pid[1, 2] - means_pid[2, 2]
