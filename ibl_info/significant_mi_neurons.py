@@ -165,7 +165,11 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
 def run_checks(task_tuple):
 
     eid, region, epoch = task_tuple
-    one = ONE()
+    one = one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = find_significant_neurons_sessions(eid, epoch, one, region)
@@ -180,7 +184,11 @@ def run_checks(task_tuple):
 
 def run_flattened(list_of_regions, epoch):
 
-    one = ONE()
+    one = one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
