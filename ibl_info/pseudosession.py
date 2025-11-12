@@ -27,13 +27,8 @@ from ibl_info.utils import check_config
 config = check_config()
 
 
-def get_requisite_eids(important_regions):
+def get_requisite_eids(one, important_regions):
 
-    one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        username="intbrainlab",
-        password="international",
-    )
     unit_df = bwm_units(one)
 
     global_eid_list = []
@@ -97,6 +92,19 @@ def fit_eid(one, eid):
     model.load_or_train(remove_old=False, adaptive=True)
 
 
+def fit_all_animals(important_regions):
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
+    global_eid_list = get_requisite_eids(one, important_regions)
+
+    for eid in tqdm(global_eid_list):
+        fit_eid(one, eid)
+
+
 if __name__ == "__main__":
 
     # this flow is not the best, but we can also crosscheck if the behavioral fit exists, so in that way is optimum
@@ -128,20 +136,22 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    subject_id = "CSH_ZAD_022"
-    eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
-    session_id = eid
-    one = ONE()
-    trials, mask = load_trials_and_mask(
-        one, session_id, exclude_nochoice=True, exclude_unbiased=True
-    )
-    trials = trials[mask]
+    fit_all_animals(important_regions)
 
-    model = models.ActionKernel(
-        path_to_results=config["model_locations"],
-        mouse_name=eid,
-        session_uuids=eid,
-        df_trials=trials,
-        single_zeta=True,
-    )
-    model.load_or_train(remove_old=False, adaptive=True)
+    # subject_id = "CSH_ZAD_022"
+    # eid = "a82800ce-f4e3-4464-9b80-4c3d6fade333"
+    # session_id = eid
+    # one = ONE()
+    # trials, mask = load_trials_and_mask(
+    #     one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    # )
+    # trials = trials[mask]
+
+    # model = models.ActionKernel(
+    #     path_to_results=config["model_locations"],
+    #     mouse_name=eid,
+    #     session_uuids=eid,
+    #     df_trials=trials,
+    #     single_zeta=True,
+    # )
+    # model.load_or_train(remove_old=False, adaptive=True)
