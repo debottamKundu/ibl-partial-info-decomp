@@ -69,7 +69,7 @@ def get_window(decoding_interval):
     if decoding_interval == "stim":
         time_window = [0, 0.1]
     elif decoding_interval == "choice":
-        time_window = [-0.2, 0]
+        time_window = [-0.1, 0]
     elif decoding_interval == "feedback":
         time_window = [0, 0.2]
     elif decoding_interval == "action-kernel" or decoding_interval == "glm-hmm":
@@ -201,9 +201,9 @@ def get_new_cinc_intervals_choice(trials_df, decoding_interval="choice"):
 def return_significant_cells(eid, epoch, cluster_ids):
 
     if epoch == "stim":
-        df_epoch = pd.read_csv("../data/external/bwm_single_cell_stim_2024_10_21.csv")
+        df_epoch = pd.read_csv("./data/external/bwm_single_cell_stim_2024_10_21.csv")
     elif epoch == "choice":
-        df_epoch = pd.read_csv("../data/external/bwm_single_cell_choice_2024_10_21.csv")
+        df_epoch = pd.read_csv("./data/external/bwm_single_cell_choice_2024_10_21.csv")
     else:
         raise NotImplementedError
 
@@ -223,7 +223,7 @@ def return_significant_cells(eid, epoch, cluster_ids):
                 xdf_pval = xdf.p_value_stim
             elif epoch == "choice":
                 xdf_pval = xdf.p_value_choice
-            if xdf_pval.iloc[0] <= 0.05:
+            if xdf_pval.iloc[0] < 0.05:
                 boolean_array[idx] = True
             else:
                 boolean_array[idx] = False

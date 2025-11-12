@@ -13,6 +13,8 @@ max_rt: None
 hemisphere: ("left", "right")
 frames: [0,2]
 freeze: None
+model_locations: "/usr/people/kundu/code/ibl-partial-info-decomp/data/models" 
+# model_locations: "/Users/dkundu/Documents/phd/ibl-partial-info-decomp/models/results_behavioral"
 pq_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/external/stimside_stage2.pqt"
 stim_prior_regions : [
         "VISp",
