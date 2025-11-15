@@ -61,16 +61,16 @@ def generate_pseudosession_multiple(one, eid, n_permutations=100):
     choices = []
     for _ in range(n_permutations):
         pseudosess = generate_pseudo_session(trials, generate_choices=False)
-    stim, _, side = mut_format_input(  # pyright: ignore[reportAssignmentType]
-        [pseudosess.signed_contrast.values],
-        [trials.choice.values],
-        [pseudosess.stim_side.values],
-    )
-    act_sim, stim, side = model.simulate(  # type: ignore
-        arr_params, stim[0, :], side[0, :], nb_simul=1, only_perf=False, return_prior=False
-    )
-    act_sim = np.array(act_sim.squeeze().T, dtype=np.int64)
-    choices.append(act_sim)
+        stim, _, side = mut_format_input(  # pyright: ignore[reportAssignmentType]
+            [pseudosess.signed_contrast.values],
+            [trials.choice.values],
+            [pseudosess.stim_side.values],
+        )
+        act_sim, stim, side = model.simulate(  # type: ignore
+            arr_params, stim[0, :], side[0, :], nb_simul=1, only_perf=False, return_prior=False
+        )
+        act_sim = np.array(act_sim.squeeze().T, dtype=np.int64)
+        choices.append(act_sim)
 
     return choices
 

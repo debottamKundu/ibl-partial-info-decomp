@@ -198,7 +198,7 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
 def run_checks(task_tuple):
 
     eid, region, epoch = task_tuple
-    one = one = ONE(
+    one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         username="intbrainlab",
         password="international",
@@ -217,7 +217,7 @@ def run_checks(task_tuple):
 
 def run_flattened(list_of_regions, epoch):
 
-    one = one = ONE(
+    one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         username="intbrainlab",
         password="international",
