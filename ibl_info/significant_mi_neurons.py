@@ -1,4 +1,4 @@
-## try to find significant MI neurons
+# try to find significant MI neurons
 
 from one.api import ONE
 from brainbox.population.decode import get_spike_counts_in_bins
@@ -98,8 +98,8 @@ def mi_per_neuron_permuted(
     elif epoch == "choice":
         pseudo_session_targets = generate_pseudosession_multiple(one, session_id, n_permutations)
         for i in range(n_permutations):
-            pseudo_target = pseudo_session_targets[i][mask]
-            mi_null[i] = info.corrected_mutual(  # type: ignore
+            pseudo_target = pseudo_session_targets[i]
+            mi_null[i] = info.corrected_mutual_information(  # type: ignore
                 source=spikes, target=pseudo_target, unbiased_measure="plugin"
             )
 
