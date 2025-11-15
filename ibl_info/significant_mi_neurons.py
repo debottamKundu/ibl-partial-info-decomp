@@ -49,6 +49,10 @@ from ibl_info.utils import check_config
 from statsmodels.stats.multitest import multipletests
 import ibl_info.measures.information_measures as info
 from brainbox.task.closed_loop import generate_pseudo_session
+from ibl_info.pseudosession import (
+    generate_pseudosession_multiple,
+    generate_pseudosession_with_choice,
+)
 
 config = check_config()
 
@@ -69,36 +73,57 @@ def generate_target(trials_df):
     return stim_side
 
 
-def mi_per_neuron_permuted(spikes, decoding_variable, trials, mask, n_permutations=100):
+def mi_per_neuron_permuted(
+    one, session_id, spikes, decoding_variable, trials, mask, epoch, n_permutations=100
+):
 
     mi_observed = info.corrected_mutual_information(  # type: ignore
         source=spikes, target=decoding_variable, unbiased_measure="plugin"
     )
     # use original permutation statistics
     mi_null = np.zeros(n_permutations)
-    for i in range(n_permutations):
 
-        stim_shuffled = np.random.permutation(decoding_variable)
-        mi_null[i] = info.corrected_mutual_information(  # type: ignore
-            source=spikes, target=stim_shuffled, unbiased_measure="plugin"
-        )
-        # pseudo_session = generate_pseudo_session(trials)
-        # pseudo_session = pseudo_session[mask]
-        # pseudo_targets = generate_target(pseudo_session)
-        # mi_null[i] = info.corrected_mutual_information(  # type: ignore
-        #     source=spikes, target=pseudo_targets, unbiased_measure="plugin"
-        # )
+    # stim_shuffled = np.random.permutation(decoding_variable)
+    # mi_null[i] = info.corrected_mutual_information(  # type: ignore
+    #     source=spikes, target=stim_shuffled, unbiased_measure="plugin"
+    # )
+    if epoch == "stim":
+        for i in range(n_permutations):
+            pseudo_session = generate_pseudo_session(trials, generate_choices=False)
+            pseudo_session = pseudo_session[mask]
+            pseudo_targets = generate_target(pseudo_session)
+            mi_null[i] = info.corrected_mutual_information(  # type: ignore
+                source=spikes, target=pseudo_targets, unbiased_measure="plugin"
+            )
+    elif epoch == "choice":
+        pseudo_session_targets = generate_pseudosession_multiple(one, session_id, n_permutations)
+        for i in range(n_permutations):
+            pseudo_target = pseudo_session_targets[i][mask]
+            mi_null[i] = info.corrected_mutual(  # type: ignore
+                source=spikes, target=pseudo_target, unbiased_measure="plugin"
+            )
 
     p_value = (np.sum(mi_null >= mi_observed) + 1) / (n_permutations + 1)  # type: ignore
     return mi_observed, p_value
 
 
-def significant_neurons(spikes, decoding_variable, trials, mask, n_permutations=100, alpha=0.05):
+def significant_neurons(
+    one, session_id, spikes, decoding_variable, trials, mask, epoch, n_permutations=100, alpha=0.05
+):
 
     mi_data = np.zeros((spikes.shape[0]))
     p_values = np.zeros((spikes.shape[0]))
     for idx in range(len(mi_data)):
-        mi_data[idx], p_values[idx] = mi_per_neuron_permuted(spikes[idx, :], decoding_variable, trials, mask, n_permutations=n_permutations)  # type: ignore
+        mi_data[idx], p_values[idx] = mi_per_neuron_permuted(  # type: ignore
+            one=one,
+            session_id=session_id,
+            spikes=spikes[idx, :],
+            decoding_variable=decoding_variable,
+            trials=trials,
+            mask=mask,
+            epoch=epoch,
+            n_permutations=n_permutations,
+        )
 
     # do corrections
     reject, pvals_corrected, _, _ = multipletests(p_values, alpha=alpha, method="fdr_bh")
@@ -150,7 +175,15 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
         discretized_spikes = discretize_keeping_zeros(spike_data, n_bins=n_bins)
 
     mi_data, p_values, reject = significant_neurons(
-        discretized_spikes, target_variable, trials, mask, n_permutations=1000, alpha=0.05
+        one=one,
+        session_id=session_id,
+        spikes=discretized_spikes,
+        decoding_variable=target_variable,
+        trials=trials,
+        mask=mask,
+        epoch=epoch,
+        n_permutations=200,
+        alpha=0.05,
     )
 
     information_pkl = {}
@@ -220,7 +253,9 @@ def run_flattened(list_of_regions, epoch):
             eid_data[eid][region] = information_pickle
 
     for eid, eid_pickle in eid_data.items():
-        with open(f"./data/generated/mi_significant_neurons_choice_{eid}_{epoch}.pkl", "wb") as f:
+        with open(
+            f"./data/generated/mi_significant_neurons_properpseudo_{eid}_{epoch}.pkl", "wb"
+        ) as f:
             pkl.dump(eid_pickle, f)
 
     print("Done!")

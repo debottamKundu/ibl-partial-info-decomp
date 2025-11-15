@@ -42,7 +42,41 @@ def get_requisite_eids(one, important_regions):
     return global_eid_list
 
 
-def generate_pseudosession(one, eid, choice=False):
+def generate_pseudosession_multiple(one, eid, n_permutations=100):
+
+    # load animal
+    trials, mask = load_trials_and_mask(
+        one, eid, exclude_nochoice=True, exclude_unbiased=True
+    )  # to keep same statistics
+    trials = trials[mask]
+    model = models.ActionKernel(
+        path_to_results=config["model_locations"],
+        mouse_name=eid,
+        session_uuids=eid,
+        df_trials=trials,
+        single_zeta=True,
+    )
+    model.load_or_train(remove_old=False, adaptive=True)
+    arr_params = model.get_parameters(parameter_type="posterior_mean")[None]
+    choices = []
+    for _ in range(n_permutations):
+        pseudosess = generate_pseudo_session(trials, generate_choices=False)
+    stim, _, side = mut_format_input(  # pyright: ignore[reportAssignmentType]
+        [pseudosess.signed_contrast.values],
+        [trials.choice.values],
+        [pseudosess.stim_side.values],
+    )
+    act_sim, stim, side = model.simulate(  # type: ignore
+        arr_params, stim[0, :], side[0, :], nb_simul=1, only_perf=False, return_prior=False
+    )
+    act_sim = np.array(act_sim.squeeze().T, dtype=np.int64)
+    choices.append(act_sim)
+
+    return choices
+
+
+def generate_pseudosession_with_choice(one, eid, choice=False):
+
     trials, mask = load_trials_and_mask(
         one, eid, exclude_nochoice=True, exclude_unbiased=True
     )  # to keep same statistics

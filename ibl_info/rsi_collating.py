@@ -352,7 +352,11 @@ def rsi_plots(final_dict):
     # combine all together, based on number though
     means_regions = []
     for region_idx in range(number_of_regions):
+
+        if region_names[region_idx] == "LGd" or region_names[region_idx] == "SNr":
+            continue
         # counts are in IC, C, A
+
         if region_means_count[region_idx, 3] == 1:
             print(f"We consider : {region_names[region_idx]}")
             if region_means_count[region_idx, 0] == 2:
