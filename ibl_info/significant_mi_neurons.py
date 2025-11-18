@@ -182,7 +182,7 @@ def find_significant_neurons_sessions(session_id, epoch, one, region):
         trials=trials,
         mask=mask,
         epoch=epoch,
-        n_permutations=200,
+        n_permutations=100,
         alpha=0.05,
     )
 

@@ -73,8 +73,9 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 if config["epoch"] == "stim":
                     filename = f"./data/generated/cellmi/mi_significant_neurons_pseudo_{session_id}_stim.pkl"
                 elif config["epoch"] == "choice":
-                    filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
-
+                    # filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
+                    # use new filename
+                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]
@@ -215,12 +216,12 @@ def run_analysis_single_session(
     )  # this returns all neurons from a single region that pass qc
     # however, it is in trials x neurons
     if single_cell_filter:
-
         # use new function with bwm single cells
-        neuron_flags = return_significant_cells(session_id, epoch, cluster_uuids_list)
-        # neuron_flags = select_neurons_for_analysis_all(
-        #     spikes, clusters, intervals, region, session_id=session_id
-        # )
+        # neuron_flags = return_significant_cells(session_id, epoch, cluster_uuids_list)
+        # use old significant neurons
+        neuron_flags = select_neurons_for_analysis_all(
+            spikes, clusters, intervals, region, session_id=session_id
+        )
     else:
         neuron_flags = select_neurons_for_analysis_all(spikes, clusters, intervals, region)
     if np.sum(neuron_flags) < 2:
