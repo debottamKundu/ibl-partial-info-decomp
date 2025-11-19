@@ -75,7 +75,10 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 elif config["epoch"] == "choice":
                     # filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
                     # use new filename
-                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
+                    addendum = ""
+                    if config["discretize"] == 2:
+                        addendum = "_equi"
+                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]
