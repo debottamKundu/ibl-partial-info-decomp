@@ -117,8 +117,8 @@ def prepare_and_run_data(task_tuple):
     eid, region, epoch = task_tuple
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
         password="international",
-        silent=True,
     )
     try:
         # ideally information pickle, but i want to subsample mutliple times
@@ -140,8 +140,8 @@ def prepare_and_run_data(task_tuple):
 def run_flattened(list_of_regions, epoch):
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
         password="international",
-        silent=True,
     )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
