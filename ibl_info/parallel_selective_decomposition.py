@@ -157,7 +157,7 @@ if __name__ == "__main__":
         "SIM",
         "IP",
     ]
-
+    
     discretizer = config["discretize"]
     run_flattened(important_regions, "choice", discretizer=discretizer)
     # 1 is the alternate method

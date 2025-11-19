@@ -506,7 +506,11 @@ def prepare_and_run_data(task_tuple):
 
 def run_flattened(list_of_regions, epoch):
 
-    one = ONE()
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+    )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
