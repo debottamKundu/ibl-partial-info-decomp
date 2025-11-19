@@ -1,13 +1,13 @@
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 import math
 
 
 def analyze_neural_interaction(
-    neural_data, labels, n_folds=5, n_bootstraps=50, balance_classes=True, C=1.0
+    neural_data, labels, n_folds=2, n_bootstraps=50, balance_classes=True, C=1.0
 ):
     """
     Analyzes the interaction between two complementary halves of the neural population.
@@ -59,7 +59,8 @@ def analyze_neural_interaction(
 
     # Storage for results
     bootstrap_coefs = []
-    bootstrap_scores = []
+    bootstrap_test_scores = []
+    bootstrap_train_scores = []
     bootstrap_vars = []
 
     X_transposed = neural_data.T
@@ -73,13 +74,16 @@ def analyze_neural_interaction(
         idx_subset_1 = all_indices[:split_point]
         idx_subset_2 = all_indices[split_point:]
 
-        kf = KFold(n_splits=n_folds, shuffle=True, random_state=None)
+        # kf = KFold(n_splits=n_folds, shuffle=True, random_state=None)
+        kf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=None)
 
         fold_coefs = []
-        fold_scores = []
+        fold_test_scores = []
+        fold_train_scores = []
         fold_vars = []
 
-        for train_index, test_index in kf.split(X_transposed):
+        for train_index, test_index in kf.split(X_transposed, labels):
+
             X_train, X_test = X_transposed[train_index], X_transposed[test_index]
             y_train, y_test = labels[train_index], labels[test_index]
 
@@ -137,10 +141,12 @@ def analyze_neural_interaction(
             model.fit(features_train, y_train)
 
             fold_coefs.append(model.coef_[0])
-            fold_scores.append(model.score(features_test, y_test))
+            fold_test_scores.append(model.score(features_test, y_test))
+            fold_train_scores.append(model.score(features_train, y_train))
 
         bootstrap_coefs.append(np.mean(fold_coefs, axis=0))
-        bootstrap_scores.append(np.mean(fold_scores))
+        bootstrap_test_scores.append(np.mean(fold_test_scores))
+        bootstrap_train_scores.append(np.mean(fold_train_scores))
         bootstrap_vars.append(np.mean(fold_vars, axis=0))
 
         if (b + 1) % 10 == 0:
@@ -148,8 +154,9 @@ def analyze_neural_interaction(
 
     # 4. Aggregate Results
     bootstrap_coefs = np.array(bootstrap_coefs)  # Shape (n_bootstraps, 3)
-    bootstrap_scores = np.array(bootstrap_scores)
     bootstrap_vars = np.array(bootstrap_vars)  # Shape (n_bootstraps, 2)
+    bootstrap_test_scores = np.array(bootstrap_test_scores)
+    bootstrap_train_scores = np.array(bootstrap_train_scores)
 
     means = np.mean(bootstrap_coefs, axis=0)
     stds = np.std(bootstrap_coefs, axis=0)
@@ -165,14 +172,17 @@ def analyze_neural_interaction(
             "PC1_Subset2": stds[1],
             "Interaction": stds[2],
         },
-        "mean_test_accuracy": np.mean(bootstrap_scores),
-        "std_test_accuracy": np.std(bootstrap_scores),
+        "mean_test_accuracy": np.mean(bootstrap_test_scores),
+        "std_test_accuracy": np.std(bootstrap_test_scores),
+        "mean_train_accuracy": np.mean(bootstrap_train_scores),  # Added
+        "std_train_accuracy": np.std(bootstrap_train_scores),  # Added
         "mean_explained_variance": {
             "Subset1": np.mean(bootstrap_vars[:, 0]),
             "Subset2": np.mean(bootstrap_vars[:, 1]),
         },
         "all_bootstrap_coefficients": bootstrap_coefs,
-        "all_bootstrap_accuracy": bootstrap_scores,
+        "all_bootstrap_test_accuracy": bootstrap_test_scores,
+        "all_bootstrap_train_accuracy": bootstrap_train_scores,
         "all_bootstrap_explained_variance": bootstrap_vars,
     }
 

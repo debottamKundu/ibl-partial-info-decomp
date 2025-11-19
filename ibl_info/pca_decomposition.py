@@ -85,7 +85,7 @@ def run_pca_single_session(session_id, epoch, one, region):
     minimum_units = config["min_units"]
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=3
+        spikes, clusters, intervals, [region], minimum_units=minimum_units
     )  # this returns all neurons from a single region that pass qc
 
     # no discretization, use raw counts
@@ -100,13 +100,13 @@ def run_pca_single_session(session_id, epoch, one, region):
     information_pickle["trials"] = trial_count
 
     information_pickle["all"] = analyze_neural_interaction(
-        spike_data.T, target_variable
+        spike_data, target_variable
     )  # expects neurons x trials
     information_pickle["congruent"] = analyze_neural_interaction(
-        congruent_spikes.T, congruent_target
+        congruent_spikes, congruent_target
     )
     information_pickle["incongruent"] = analyze_neural_interaction(
-        incongruent_spikes.T, incongruent_target
+        incongruent_spikes, incongruent_target
     )
 
     return information_pickle
