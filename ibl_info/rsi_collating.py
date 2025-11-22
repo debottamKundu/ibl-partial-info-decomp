@@ -353,9 +353,14 @@ def rsi_plots(final_dict):
     means_regions = []
     for region_idx in range(number_of_regions):
 
-        if region_names[region_idx] == "LGd" or region_names[region_idx] == "SNr":
-            continue
-        # counts are in IC, C, A
+        # if (
+        #     region_names[region_idx] == "LGd"
+        #     or region_names[region_idx] == "SNr"
+        #     or region_names[region_idx] == "IP"
+        #     or region_names[region_idx] == "MG"
+        # ):
+        #     continue
+        # # counts are in IC, C, A
 
         if region_means_count[region_idx, 3] == 1:
             print(f"We consider : {region_names[region_idx]}")
@@ -399,7 +404,10 @@ def rsi_plots(final_dict):
         means_regions[:, 1]
     ) / np.sqrt(len(means_regions))
     x1, x2 = 0, 1  # 0 and 1 correspond to the index of the bars
-    line_y = np.max([a, b]) + 1.5 * np.max([c, d])  # Position the line above the taller bar
+
+    line_y = np.max(np.abs([a, b])) + 1.5 * np.max(
+        np.abs([c, d])
+    )  # Position the line above the taller bar
 
     # Plot a horizontal line
     plt.plot([x1, x2], [line_y, line_y], color="black", linewidth=1)
