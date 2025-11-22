@@ -78,6 +78,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                     addendum = ""
                     if config["discretize"] == 2:
                         addendum = "_equi"
+                    # TODO: find a cleaner solution for the filename
                     filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)

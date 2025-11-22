@@ -252,9 +252,21 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             eid_data[eid][region] = information_pickle
 
+    discretizer = config["discretize"]
+
+    suffix = ""
+    if discretizer == 1:
+        suffix += "_alternate"
+    else:
+        suffix += "_equipopulated"
+
+    n_bins = config["n_bins"]
+    suffix += f"_{n_bins}"
+
     for eid, eid_pickle in eid_data.items():
         with open(
-            f"./data/generated/mi_significant_neurons_properpseudo_{eid}_{epoch}.pkl", "wb"
+            f"./data/generated/mi_significant_neurons_properpseudo_{eid}_{epoch}_{suffix}.pkl",
+            "wb",
         ) as f:
             pkl.dump(eid_pickle, f)
 
