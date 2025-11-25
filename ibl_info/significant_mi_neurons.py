@@ -275,4 +275,4 @@ def run_flattened(list_of_regions, epoch):
 
 if __name__ == "__main__":
     important_regions = config["stim_prior_regions"]
-    run_flattened(important_regions, "choice")
+    run_flattened(important_regions, "stim")

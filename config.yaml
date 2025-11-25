@@ -5,7 +5,7 @@ n_bins: 3
 single_cell_filter: True
 mi_filter: True
 decoder_filter: False
-discretize: 2
+discretize: 1
 repeats_for_bias_correction: 5
 bias_correction: "qe"
 min_rt: 0.08
