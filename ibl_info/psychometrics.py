@@ -183,7 +183,7 @@ if __name__ == "__main__":
             info_dict[eid] = data
 
     # 4. Save
-    with open("../data/generated/contrastwiseperformance.pkl", "wb") as f:
+    with open("./data/generated/contrastwiseperformance.pkl", "wb") as f:
         pkl.dump(info_dict, f)
 
     print("Done!")
