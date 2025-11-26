@@ -37,8 +37,6 @@ def prepare_ephys_data(spikes, clusters, intervals, regions, minimum_units=10):
         region_mask = np.isin(beryl_regions, region)
         # add another mask here to check for single units
         # i think this makes sense; pass it in
-        # NOTE ::: add it here
-
         if sum(region_mask) < minimum_units:
             continue
         else:

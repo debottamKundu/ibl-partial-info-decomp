@@ -13,6 +13,7 @@ from brainbox.io.one import SessionLoader, SpikeSortingLoader
 from brainbox.population.decode import get_spike_counts_in_bins
 from brainbox.singlecell import bin_spikes2D
 from brainbox.task.trials import find_trial_ids, get_event_aligned_raster, get_psth
+from sklearn.utils import compute_sample_weight
 from brainwidemap import bwm_query, bwm_units, load_good_units, load_trials_and_mask
 from brainwidemap.bwm_loading import merge_probes
 from iblatlas.atlas import AllenAtlas, BrainRegions
@@ -22,7 +23,7 @@ from sklearn.discriminant_analysis import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut
+from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from ibl_info.selective_decomposition import filter_eids
@@ -36,383 +37,284 @@ from sklearn.pipeline import Pipeline
 from sklearn.datasets import make_classification
 from sklearn.ensemble import GradientBoostingClassifier
 import ibl_info.measures.information_measures as info
-from ibl_info.prepare_data_pid import get_new_cinc_intervals, prepare_ephys_data
+from ibl_info.prepare_data_pid import (
+    get_new_cinc_intervals,
+    prepare_ephys_data,
+    get_new_cinc_intervals_choice,
+)
 from ibl_info.utils import check_config, equipopulated_binning, equispaced_binning
+
 
 config = check_config()
 
 
-def split_and_decode(
-    trial_types,
-    neural_activity,
-    n_splits=10,
-    decoder="logreg",
-    return_probs=True,
-    random_state=None,
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
+
+
+def run_decoder_bootstrapping(
+    neural_data,
+    trial_labels,
+    subset_size_D,
+    n_bootstraps=50,
+    n_splits=5,
+    congruent_mask=None,
+    incongruent_mask=None,
+    scale=False,
 ):
     """
-    Perform multiple random neuron splits and run LOOCV decoders for each half.
+    Bootstraps linear decoders on non-overlapping subsets of neurons.
+    Uses K-Fold Cross Validation to ensure predictions are generated for every trial.
+    Includes data scaling (StandardScaler) within the CV loop.
 
-    Parameters
-    ----------
-    trial_types : array-like, shape (n_trials,)
-        Labels for each trial.
-    neural_activity : array-like, shape (n_trials, n_neurons)
-        Neural activity per trial.
-    n_splits : int, default=10
-        Number of random neuron splits to perform.
-    decoder : {"logreg", "svm"}, default="logreg"
-        Choice of decoder model: logistic regression or SVM.
-    return_probs : bool, default=True
-        If True, return class probabilities; if False, return hard predictions.
-    random_state : int or None
-        Seed for reproducibility.
+    Parameters:
+    -----------
+    neural_data : np.ndarray
+        Shape (n, m) where n is neurons and m is trials.
+    trial_labels : np.ndarray
+        Shape (1, n) or (n,). The class labels for the trials.
+    subset_size_D : int
+        Number of neurons to include in each of the two non-overlapping sets.
+    n_bootstraps : int
+        Number of times to resample neurons.
+    n_splits : int
+        Number of K-Fold splits.
+    congruent_mask : np.ndarray, optional
+        Boolean mask indicating congruent trials.
+    incongruent_mask : np.ndarray, optional
+        Boolean mask indicating incongruent trials.
+    scale: bool, optional
+        Set if scaling is on or not
 
-    Returns
-    -------
-    outputs_split1 : ndarray, shape (n_splits, n_trials, n_classes or 1)
-    outputs_split2 : ndarray, shape (n_splits, n_trials, n_classes or 1)
+    Returns:
+    --------
+    list of dicts
+        Each dict contains:
+        - 'probs_A': Full set of probabilities for Set A (aligned with input trials)
+        - 'probs_B': Full set of probabilities for Set B (aligned with input trials)
+        - 'probs_A_cong': Probabilities for Set A, subsetted to congruent trials
+        - 'probs_A_incong': Probabilities for Set A, subsetted to incongruent trials
+        - 'probs_B_cong': Probabilities for Set B, subsetted to congruent trials
+        - 'probs_B_incong': Probabilities for Set B, subsetted to incongruent trials
+        - 'y_cong': Ground truth labels for congruent trials
+        - 'y_incong': Ground truth labels for incongruent trials
+        - 'accuracy_A': Overall accuracy of Decoder A
+        - 'accuracy_B': Overall accuracy of Decoder B
+        - 'balanced_acc_A': Balanced accuracy of Decoder A
+        - 'balanced_acc_B': Balanced accuracy of Decoder B
+        - 'neurons_A_indices': Indices of neurons used for Set A
+        - 'neurons_B_indices': Indices of neurons used for Set B
     """
-    rng = np.random.default_rng(random_state)
-    trial_types = np.asarray(trial_types)
-    X = np.asarray(neural_activity)
+
+    X = neural_data  # (n_trials, n_neurons)
+    y = trial_labels.flatten()
+
     n_trials, n_neurons = X.shape
-    n_classes = len(np.unique(trial_types))
 
-    # Storage for outputs
-    if return_probs:
-        outputs1 = np.zeros((n_splits, n_trials, n_classes))
-        outputs2 = np.zeros((n_splits, n_trials, n_classes))
-    else:
-        outputs1 = np.zeros((n_splits, n_trials), dtype=int)
-        outputs2 = np.zeros((n_splits, n_trials), dtype=int)
+    # Handle masks: Ensure they are flattened boolean arrays
+    cong_indices = None
+    incong_indices = None
 
-    accuracies = np.zeros((n_splits, 2))
-    loo = LeaveOneOut()
+    if congruent_mask is not None:
+        congruent_mask = np.array(congruent_mask).flatten().astype(bool)
+        cong_indices = np.where(congruent_mask)[0]
 
-    for s in range(n_splits):
-        # Random neuron split
-        perm = rng.permutation(n_neurons)
-        half = n_neurons // 2
-        idx1, idx2 = perm[:half], perm[half:]
-        X1, X2 = X[:, idx1], X[:, idx2]
+    if incongruent_mask is not None:
+        incongruent_mask = np.array(incongruent_mask).flatten().astype(bool)
+        incong_indices = np.where(incongruent_mask)[0]
 
-        # Storage per split
-        if return_probs:
-            out1 = np.zeros((n_trials, n_classes))
-            out2 = np.zeros((n_trials, n_classes))
-        else:
-            out1 = np.zeros(n_trials, dtype=int)
-            out2 = np.zeros(n_trials, dtype=int)
-
-        for train_idx, test_idx in tqdm(loo.split(X1)):
-            # Pick decoder
-            if decoder == "logreg":
-                clf1 = LogisticRegression(max_iter=500, solver="lbfgs")
-                clf2 = LogisticRegression(max_iter=500, solver="lbfgs")
-            elif decoder == "svm":
-                clf1 = SVC(kernel="linear", probability=return_probs)
-                clf2 = SVC(kernel="linear", probability=return_probs)
-            elif decoder == "nonlinear":
-                clf1 = SVC(kernel="rbf", probability=return_probs)
-                clf2 = SVC(kernel="rbf", probability=return_probs)
-            else:
-                raise ValueError("decoder must be 'logreg' or 'svm'")
-
-            clf1.fit(X1[train_idx], trial_types[train_idx])
-            clf2.fit(X2[train_idx], trial_types[train_idx])
-
-            if return_probs:
-                out1[test_idx] = clf1.predict_proba(X1[test_idx])
-                out2[test_idx] = clf2.predict_proba(X2[test_idx])
-            else:
-                out1[test_idx] = clf1.predict(X1[test_idx])
-                out2[test_idx] = clf2.predict(X2[test_idx])
-
-            if return_probs:
-                # Convert probabilities to class labels (using argmax)
-                preds1 = np.argmax(out1, axis=1)
-                preds2 = np.argmax(out2, axis=1)
-            else:
-                preds1 = out1
-                preds2 = out2
-        accuracy1 = balanced_accuracy_score(trial_types, preds1)
-        accuracy2 = balanced_accuracy_score(trial_types, preds2)
-
-        accuracies[s] = np.asarray([accuracy1, accuracy2])  # type: ignore
-
-        outputs1[s] = out1
-        outputs2[s] = out2
-
-    return outputs1, outputs2, accuracies
-
-
-def compute_decoder_pid(target, spikes, n_bins=2):
-
-    output_a, output_b, accuracies = split_and_decode(target, spikes)
-    n_bins = config["n_bins"]
-    # output_a is splits x trials x 2
-    # we only take probability left ( I think?)
-    # probability left is index 1
-
-    probability_output_a = output_a[:, :, 1]
-    probability_output_b = output_b[:, :, 1]
-
-    repeats = output_a.shape[0]
-
-    pid_array = np.zeros((repeats, 6))
-
-    for idx in range(0, repeats):
-        X1 = np.asarray(
-            equispaced_binning(probability_output_a[idx], n_bins=n_bins), dtype=np.int32
-        )
-        X2 = np.asarray(
-            equispaced_binning(probability_output_b[idx], n_bins=n_bins), dtype=np.int32
+    # Check constraints
+    if 2 * subset_size_D > n_neurons:
+        raise ValueError(
+            f"Cannot select 2 non-overlapping sets of size {subset_size_D} "
+            f"from {n_neurons} neurons."
         )
 
-        Y = np.asarray(target, dtype=np.int32)
+    results = []
 
-        pid_array[idx, 0:4] = info.corrected_pid(sourcea=X1, sourceb=X2, target=Y)  # type: ignore # QE
-        pid_array[idx, 4:] = accuracies[idx]
+    print(f"Starting bootstrapping: {n_bootstraps} iterations with {n_splits}-Fold CV...")
 
-    return pid_array
+    for i in range(n_bootstraps):
+        # 2. Sub-sample neurons
+        permuted_indices = np.random.permutation(n_neurons)
+        idx_A = permuted_indices[:subset_size_D]
+        idx_B = permuted_indices[subset_size_D : 2 * subset_size_D]
 
+        X_subset_A = X[:, idx_A]
+        X_subset_B = X[:, idx_B]
 
-def subsampled(congruent_spikes, congruent_targets, incongruent_targets, decoder_pid=True):
+        # Placeholders for full dataset predictions
+        n_classes = len(np.unique(y))
 
-    left_fraction = np.sum(incongruent_targets == 1) / len(incongruent_targets)
+        # Initialize with zeros.
+        # Since we iterate through all folds, every index will be filled exactly once.
+        probs_A_all = np.zeros((n_trials, n_classes))
+        probs_B_all = np.zeros((n_trials, n_classes))
 
-    # we want to ensure similar fraction for congruent subsampling
-    left_congruent = np.where(congruent_targets == 1)[0]
-    right_congruent = np.where(congruent_targets == 0)[0]
+        # 3. K-Fold Cross Validation Loop
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=None)
 
-    sampled_pid = []
-    for repeats in range(config["repeats_for_bias_correction"]):
-        n_left_subsample = int(np.round(left_fraction * len(incongruent_targets)))
-        n_right_subsample = int(len(incongruent_targets) - n_left_subsample)
+        for train_idx, test_idx in skf.split(X, y):
+            # Split Data
+            X_train_A, X_test_A = X_subset_A[train_idx], X_subset_A[test_idx]
+            X_train_B, X_test_B = X_subset_B[train_idx], X_subset_B[test_idx]
+            y_train = y[train_idx]
 
-        # now we need to do the actual subsampling
-        selected_indices_left = np.random.choice(left_congruent, n_left_subsample, replace=False)
-        selected_indices_right = np.random.choice(
-            right_congruent, n_right_subsample, replace=False
-        )
+            if scale:
+                scaler_A = StandardScaler()
+                X_train_A = scaler_A.fit_transform(X_train_A)
+                X_test_A = scaler_A.transform(X_test_A)
 
-        selected_indices = np.concatenate((selected_indices_left, selected_indices_right))
-        subsampled_targets = congruent_targets[selected_indices]
-        subsampled_spikes = congruent_spikes[:, selected_indices]
-        if decoder_pid:
-            pid_array = compute_decoder_pid(subsampled_targets, subsampled_spikes.T)
-            sampled_pid.append(pid_array)
-        else:
-            linear, nonlinear, performance_delta = linear_nonlinear_delta(
-                subsampled_targets, subsampled_spikes.T
-            )
-            sampled_pid.append([linear, nonlinear, performance_delta])
+                scaler_B = StandardScaler()
+                X_train_B = scaler_B.fit_transform(X_train_B)
+                X_test_B = scaler_B.transform(X_test_B)
 
-    # average
-    sampled_pid = np.asarray(sampled_pid)
+            # --- SAMPLE WEIGHTS ---
+            train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
 
-    # sampled_pid = np.mean(sampled_pid, axis=0)
+            # Train Decoders
+            clf_A = LogisticRegression(solver="lbfgs", max_iter=1000)
+            clf_B = LogisticRegression(solver="lbfgs", max_iter=1000)
 
-    return sampled_pid
+            clf_A.fit(X_train_A, y_train, sample_weight=train_weights)
+            clf_B.fit(X_train_B, y_train, sample_weight=train_weights)
 
+            # Predict and Fill
+            # test_idx here corresponds to the indices in the ORIGINAL X array.
+            # So probs_A_all will remain aligned with the original trial order.
+            probs_A_all[test_idx] = clf_A.predict_proba(X_test_A)
+            probs_B_all[test_idx] = clf_B.predict_proba(X_test_B)
 
-# def linear_nonlinear_delta(
-#     trial_types,
-#     neural_activity,
-#     linear_model="logreg",
-#     nonlinear_model="random_forest",
-#     metric="accuracy",
-# ):
-#     """
-#     Compare performance of linear vs nonlinear decoders with LOOCV.
+        # 4. Calculate Metrics (Overall)
+        preds_A = np.argmax(probs_A_all, axis=1)
+        preds_B = np.argmax(probs_B_all, axis=1)
 
-#     Parameters
-#     ----------
-#     trial_types : array-like, shape (n_trials,)
-#         Labels for each trial.
-#     neural_activity : array-like, shape (n_trials, n_neurons)
-#         Neural activity per trial.
-#     linear_model : {"logreg", "svm_linear"}, default="logreg"
-#         Choice of linear classifier.
-#     nonlinear_model : {"svm_rbf", "mlp", "random_forest"}, default="svm_rbf"
-#         Choice of nonlinear classifier.
-#     metric : {"accuracy"}, default="accuracy"
-#         Performance metric to compare.
+        acc_A = accuracy_score(y, preds_A)
+        acc_B = accuracy_score(y, preds_B)
+        bal_acc_A = balanced_accuracy_score(y, preds_A)
+        bal_acc_B = balanced_accuracy_score(y, preds_B)
 
-#     Returns
-#     -------
-#     perf_linear : float
-#         Performance of linear model.
-#     perf_nonlinear : float
-#         Performance of nonlinear model.
-#     diff : float
-#         Difference (nonlinear - linear).
-#     """
-#     trial_types = np.asarray(trial_types)
-#     X = np.asarray(neural_activity)
-#     n_trials = X.shape[0]
+        metrics_sub = {}
 
-#     loo = LeaveOneOut()
-#     # kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-#     preds_linear, preds_nonlin = [], []
-#     y_true = []
+        # Helper to compute subset metrics safely
+        def get_subset_metrics(indices, y_full, preds_A_full, preds_B_full, prefix):
+            if indices is None or len(indices) == 0:
+                return {}
 
-#     for train_idx, test_idx in loo.split(X):
-#         # ----- Linear model -----
-#         if linear_model == "logreg":
-#             clf_lin = LogisticRegression(max_iter=1000, solver="lbfgs")
-#         elif linear_model == "svm_linear":
-#             clf_lin = SVC(kernel="linear")
-#         else:
-#             raise ValueError("linear_model must be 'logreg' or 'svm_linear'")
+            y_sub = y_full[indices]
+            p_A_sub = preds_A_full[indices]
+            p_B_sub = preds_B_full[indices]
 
-#         clf_lin.fit(X[train_idx], trial_types[train_idx])
-#         preds_linear.append(clf_lin.predict(X[test_idx])[0])
+            return {
+                f"accuracy_A_{prefix}": accuracy_score(y_sub, p_A_sub),
+                f"accuracy_B_{prefix}": accuracy_score(y_sub, p_B_sub),
+                f"balanced_acc_A_{prefix}": balanced_accuracy_score(y_sub, p_A_sub),
+                f"balanced_acc_B_{prefix}": balanced_accuracy_score(y_sub, p_B_sub),
+            }
 
-#         # ----- Nonlinear model -----
-#         if nonlinear_model == "svm_rbf":
-#             clf_nonlin = SVC(kernel="rbf")
-#         elif nonlinear_model == "mlp":
-#             clf_nonlin = MLPClassifier(hidden_layer_sizes=(50,), max_iter=1000)
-#         elif nonlinear_model == "random_forest":
-#             clf_nonlin = RandomForestClassifier()
-#         else:
-#             raise ValueError("nonlinear_model must be 'svm_rbf','random_forest' or 'mlp'")
+        metrics_sub.update(get_subset_metrics(cong_indices, y, preds_A, preds_B, "cong"))
+        metrics_sub.update(get_subset_metrics(incong_indices, y, preds_A, preds_B, "incong"))
 
-#         clf_nonlin.fit(X[train_idx], trial_types[train_idx])
-#         preds_nonlin.append(clf_nonlin.predict(X[test_idx])[0])
-#         y_true.append(trial_types[test_idx])
+        # 5. Store Results
+        # Explicitly slicing the results here so you don't have to worry about indices later.
+        run_data = {
+            "iteration": i,
+            # Full aligned arrays
+            "probs_A": probs_A_all,
+            "probs_B": probs_B_all,
+            # Subsetted arrays (convenience)
+            "probs_A_cong": probs_A_all[cong_indices] if cong_indices is not None else None,
+            "probs_A_incong": probs_A_all[incong_indices] if incong_indices is not None else None,
+            "probs_B_cong": probs_B_all[cong_indices] if cong_indices is not None else None,
+            "probs_B_incong": probs_B_all[incong_indices] if incong_indices is not None else None,
+            # Metrics
+            "accuracy_A": acc_A,
+            "accuracy_B": acc_B,
+            "balanced_acc_A": bal_acc_A,
+            "balanced_acc_B": bal_acc_B,
+            # Metadata
+            "y_true": y,
+            "y_cong": y[cong_indices] if cong_indices is not None else None,
+            "y_incong": y[incong_indices] if incong_indices is not None else None,
+            "neurons_A_indices": idx_A,
+            "neurons_B_indices": idx_B,
+        }
+        run_data.update(metrics_sub)
 
-#     # Compute performance
-#     if metric == "accuracy":
-#         perf_lin = balanced_accuracy_score(trial_types, preds_linear)
-#         perf_nonlin = balanced_accuracy_score(trial_types, preds_nonlin)
-#     else:
-#         raise ValueError("Only accuracy metric implemented right now.")
+        results.append(run_data)
 
-#     return perf_lin, perf_nonlin, perf_nonlin - perf_lin
+    print("Bootstrapping complete.")
+    return results
 
 
-def linear_nonlinear_delta(trial_types, neural_activity, scale_features=True):
+def compute_information_metrics(target, sourcea, sourceb):
+    mi_a = info.corrected_mutual_information(source=sourcea, target=target)
+    mi_b = info.corrected_mutual_information(source=sourceb, target=target)
+    tvmi_ab = info.correct_trivariate_mi(source_a=sourcea, source_b=sourceb, target=target)
+    pid_ab = info.corrected_pid(sourcea=sourcea, sourceb=sourceb, target=target)
 
-    y = np.asarray(trial_types)
-    X = np.asarray(neural_activity)
+    return np.concatenate([[mi_a, mi_b, tvmi_ab], pid_ab])  # type: ignore # 7 elements
 
-    N_SPLITS_OUTER = 5
-    N_SPLITS_INNER = 3
 
-    # print("LogReg vs SVMs")
+def compute_decoder_pid(
+    target, spikes, n_bootstaps=50, n_bins=5, congruent_mask=None, incongruent_mask=None
+):
 
-    steps = [("scaler", StandardScaler())] if scale_features else []
-
-    linear_pipeline = Pipeline(
-        steps
-        + [
-            (
-                "classifier",
-                LogisticRegression(penalty="l1", solver="saga", random_state=42, max_iter=1000),
-            )
-        ]  # liblinear doesn't converge
+    results = run_decoder_bootstrapping(
+        neural_data=spikes,
+        trial_labels=target,
+        subset_size_D=10,
+        n_bootstraps=n_bootstaps,
+        n_splits=5,
+        congruent_mask=congruent_mask,
+        incongruent_mask=incongruent_mask,
     )
-    linear_param_grid = {
-        "classifier__C": [0.01, 0.1, 1, 10, 100]  # C is the inverse of regularization strength
-    }
+    # save results (yes), return this
 
-    # nonlinear_pipeline = Pipeline(
-    #     steps + [("classifier", GradientBoostingClassifier(random_state=42))]
-    # )
+    # skip the all trials
+    information_array = np.zeros((n_bootstaps, 2, 7))
 
-    # nonlinear_param_grid = {
-    #     "classifier__n_estimators": [50, 100],  # Number of boosting stages
-    #     "classifier__learning_rate": [0.01, 0.05, 0.1],  # Shrinks the contribution of each tree
-    #     "classifier__min_samples_leaf": [5, 10],
-    #     "classifier__max_depth": [2, 3, 4],  # Constrain complexity of individual trees
-    #     "classifier__subsample": [0.6, 0.7, 0.8],  # Use a fraction of data for fitting trees
-    # }
+    for iteration in range(n_bootstaps):
 
-    nonlinear_pipeline = Pipeline(
-        [("scaler", StandardScaler()), ("classifier", SVC(kernel="rbf", random_state=42))]
-    )
+        # NOTE: use this sometime
 
-    # --- Define a Hyperparameter Grid to Control Overfitting ---
-    # We search for the best combination of C and gamma.
-    # A smaller C or a smaller gamma leads to a simpler, more regularized model.
-    # nonlinear_pipeline_param_grid = {
-    #     "classifier__C": [0.1, 1, 10, 100],
-    #     "classifier__gamma": ["scale", "auto", 0.01, 0.1],
-    # }
-    nonlinear_param_grid = [
-        # Dictionary 1: For the RBF (Radial Basis Function) kernel
-        {
-            "classifier__kernel": ["rbf"],
-            "classifier__C": [0.1, 1, 10, 100],
-            "classifier__gamma": ["scale", "auto", 0.01, 0.1],
-        },
-        # Dictionary 2: For the Polynomial kernel
-        {
-            "classifier__kernel": ["poly"],
-            "classifier__C": [0.1, 1, 10],
-            "classifier__degree": [2, 3, 4],  # The degree of the polynomial
-            "classifier__gamma": ["scale", "auto"],
-        },
-        # Dictionary 3: For the Sigmoid kernel
-        {
-            "classifier__kernel": ["sigmoid"],
-            "classifier__C": [0.1, 1, 10],
-            "classifier__gamma": ["scale", "auto"],
-        },
-    ]
+        output_a_all = results[iteration]["probs_A"]
+        output_b_all = results[iteration]["probs_B"]
+        target_all = results[iteration]["y_true"]
 
-    outer_cv = KFold(n_splits=N_SPLITS_OUTER, shuffle=True, random_state=42)
-    inner_cv = KFold(n_splits=N_SPLITS_INNER, shuffle=True, random_state=42)
+        output_a_con = results[iteration]["probs_A_cong"]
+        output_b_con = results[iteration]["probs_B_cong"]
+        target_con = results[iteration]["y_cong"]
 
-    linear_scores = []
-    nonlinear_scores = []
+        output_a_incon = results[iteration]["probs_A_incong"]
+        output_b_incon = results[iteration]["probs_B_incong"]
+        target_incon = results[iteration]["y_incong"]
 
-    for i, (train_idx, test_idx) in enumerate(outer_cv.split(X, y)):
-        X_train_outer, X_test_outer = X[train_idx], X[test_idx]
-        y_train_outer, y_test_outer = y[train_idx], y[test_idx]
+        X1_con = np.asarray(equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32)
+        X2_con = np.asarray(equispaced_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32)
 
-        grid_search_linear = GridSearchCV(
-            estimator=linear_pipeline,
-            param_grid=linear_param_grid,
-            cv=inner_cv,
-            scoring="accuracy",
+        Y_con = np.asarray(target_con, dtype=np.int32)
+
+        X1_incon = np.asarray(
+            equispaced_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
         )
-        grid_search_linear.fit(X_train_outer, y_train_outer)
-        best_linear_model = grid_search_linear.best_estimator_
+        X2_incon = np.asarray(
+            equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+        )
+        Y_incon = np.asarray(target_incon, dtype=np.int32)
 
-        grid_search_nonlinear = GridSearchCV(
-            estimator=nonlinear_pipeline,
-            param_grid=nonlinear_param_grid,
-            cv=inner_cv,
-            scoring="accuracy",
+        information_array[iteration, 0, :] = compute_information_metrics(  # type: ignore
+            Y_con, X1_con, X2_con
         )
 
-        grid_search_nonlinear.fit(X_train_outer, y_train_outer)
-        best_nonlinear_model = grid_search_nonlinear.best_estimator_
+        information_array[iteration, 1, :] = compute_information_metrics(  # type: ignore
+            Y_incon, X1_incon, X2_incon
+        )
 
-        linear_accuracy = best_linear_model.score(X_test_outer, y_test_outer)
-        nonlinear_accuracy = best_nonlinear_model.score(X_test_outer, y_test_outer)
-
-        linear_scores.append(linear_accuracy)
-        nonlinear_scores.append(nonlinear_accuracy)
-
-    linear_scores = np.asarray(linear_scores)
-    nonlinear_scores = np.asarray(nonlinear_scores)
-    difference = linear_scores - nonlinear_scores
-
-    return linear_scores, nonlinear_scores, difference
-
-
-def linear_nonlinear_r2(trial_types, neural_activity, scale_features=True):
-
-    ## implement this
-    ## l1 lasso r2
-    ## random forest r2
-    ## use similar logic as that of ibl
-    return NotImplementedError
+    return information_array, results
 
 
 def run_decoder_single_session(session_id, epoch, one, region):
@@ -431,23 +333,24 @@ def run_decoder_single_session(session_id, epoch, one, region):
     )
     trials = trials[mask]
 
-    intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
-        trials, epoch
-    )
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials, epoch)
+        )
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=5
+        spikes, clusters, intervals, [region], minimum_units=config["min_units_decoding"]
     )  # this returns all neurons from a single region that pass qc
-    # however, it is in trials x neurons
 
-    spike_data = binned_spikes[0].T
+    if len(binned_spikes) == 0:
+        print(f'Neurons less than {config["min_units_decoding"]} in {region}')
+        return {}
 
-    congruent_target = target_variable[congruent_flags]
-    incongruent_target = target_variable[incongruent_flags]
-
-    congruent_spikes = spike_data[:, congruent_flags]
-    incongruent_spikes = spike_data[:, incongruent_flags]
-
+    spike_data = binned_spikes[0]  # trials x neurons, what we need
     trial_count = np.zeros((3))
 
     trial_count[0] = intervals.shape[0]
@@ -459,26 +362,17 @@ def run_decoder_single_session(session_id, epoch, one, region):
     information_pickle["neurons"] = spike_data.shape[0]
     information_pickle["trials"] = trial_count
 
-    # commented out for faster execution, ideally is needed
-    # information_pickle["incongruent_pid"] = compute_decoder_pid(
-    #     incongruent_target, incongruent_spikes.T
-    # )
-
-    # information_pickle["congruent_pid"] = subsampled(
-    #     congruent_spikes, congruent_target, incongruent_target
-    # )
-
-    # sneaky performance on entire data
-    information_pickle["all_data_delta"] = linear_nonlinear_delta(target_variable, spike_data.T)
-
-    # commented out for faster execution, ideally is needed
-    information_pickle["incongruent_delta"] = linear_nonlinear_delta(
-        incongruent_target, incongruent_spikes.T
+    information_results, results = compute_decoder_pid(
+        target=target_variable,
+        spikes=spike_data,
+        n_bootstaps=config["n_bootstraps_decoding"],
+        n_bins=config["n_bins_decoding"],
+        congruent_mask=congruent_flags,
+        incongruent_mask=incongruent_flags,
     )
 
-    information_pickle["congruent_delta"] = subsampled(
-        congruent_spikes, congruent_target, incongruent_target, decoder_pid=False
-    )
+    information_pickle["information"] = information_results
+    information_pickle["decoding_results"] = results
 
     return information_pickle
 
@@ -540,7 +434,7 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    suffix = "decoder_alldata_goodsessions_boosters"
+    suffix = "decoder_alldata_goodsessions_projections"
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():

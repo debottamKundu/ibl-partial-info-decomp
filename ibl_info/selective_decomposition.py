@@ -15,7 +15,7 @@ import numpy as np
 from iblatlas.atlas import BrainRegions
 from matplotlib import pyplot as plt
 import seaborn as sns
-import pandas as pd
+import pandas as pd 
 import itertools
 import pickle as pkl
 from tqdm import tqdm
