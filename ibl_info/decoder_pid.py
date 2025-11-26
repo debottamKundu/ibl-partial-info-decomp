@@ -317,7 +317,14 @@ def compute_decoder_pid(
     return information_array, results
 
 
-def run_decoder_single_session(session_id, epoch, one, region):
+def run_decoder_single_session(session_id, epoch, region):
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
 
     pids, probes = one.eid2pid(session_id)
     if isinstance(probes, list) and len(probes) > 1:
@@ -380,17 +387,12 @@ def run_decoder_single_session(session_id, epoch, one, region):
 def prepare_and_run_data(task_tuple):
 
     eid, region, epoch = task_tuple
-    one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        username="intbrainlab",
-        password="international",
-    )
+
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = run_decoder_single_session(
             eid,
             epoch,
-            one,
             region,
         )
         if information_pickle == {}:
@@ -404,12 +406,6 @@ def prepare_and_run_data(task_tuple):
 
 def run_flattened(list_of_regions, epoch):
 
-    one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        password="international",
-        silent=True,
-        username="intbrainlab",
-    )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
     for region in list_of_regions:
@@ -480,6 +476,13 @@ if __name__ == "__main__":
         "SIM",
         "IP",
     ]
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
 
     run_flattened(important_regions, "stim")
     # one = ONE()
