@@ -57,6 +57,13 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
         spikes, clusters, intervals, [region], minimum_units=3
     )
 
+    if config["discretize"] == 2:
+        addendum = "equi"
+    else:
+        addendum = "_alternate"
+
+    n_bins = config["n_bins"]
+
     if session_id is not None:
 
         if config["single_cell_filter"]:
@@ -71,7 +78,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 print("MI filter applied")
                 # change this here
                 if config["epoch"] == "stim":
-                    filename = f"./data/generated/cellmi/mi_significant_neurons_pseudo_{session_id}_stim.pkl"
+                    filename = f"./data/generated/cellmi/pseudo_new/mi_significant_neurons_properpseudo_{session_id}_stim_{addendum}_{n_bins}.pkl"
                 elif config["epoch"] == "choice":
                     # filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
                     # use new filename
@@ -79,7 +86,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                     if config["discretize"] == 2:
                         addendum = "_equi"
                     # TODO: find a cleaner solution for the filename
-                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
+                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo_{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]
