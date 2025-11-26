@@ -379,12 +379,12 @@ def run_decoder_single_session(session_id, epoch, one, region):
 
 def prepare_and_run_data(task_tuple):
 
-    eid, region, epoch, one = task_tuple
-    # one = ONE(
-    #     base_url="https://openalyx.internationalbrainlab.org",
-    #     username="intbrainlab",
-    #     password="international",
-    # )
+    eid, region, epoch = task_tuple
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        username="intbrainlab",
+        password="international",
+    )
     try:
         # ideally information pickle, but i want to subsample mutliple times
         information_pickle = run_decoder_single_session(
@@ -415,7 +415,7 @@ def run_flattened(list_of_regions, epoch):
     for region in list_of_regions:
         selective_eids = filter_eids(unit_df, region, significant_filter=config["decoder_filter"])
         for eid in tqdm(selective_eids):
-            all_tasks_to_run.append((eid, region, epoch, one))
+            all_tasks_to_run.append((eid, region, epoch))
 
     print(f"Total tasks: {len(all_tasks_to_run)}")
 
