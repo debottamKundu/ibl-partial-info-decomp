@@ -408,6 +408,7 @@ def run_flattened(list_of_regions, epoch):
         base_url="https://openalyx.internationalbrainlab.org",
         password="international",
         silent=True,
+        username="intbrainlab",
     )
     unit_df = bwm_units(one)
     all_tasks_to_run = []
