@@ -42,7 +42,7 @@ from ibl_info.prepare_data_pid import (
     prepare_ephys_data,
     get_new_cinc_intervals_choice,
 )
-from ibl_info.utils import check_config, equipopulated_binning, equispaced_binning
+from ibl_info.utils import check_config, equipopulated_binning, equipopulated_binning
 
 
 config = check_config()
@@ -260,14 +260,14 @@ def compute_information_metrics(target, sourcea, sourceb):
 
 
 def compute_decoder_pid(
-    target, spikes, n_bootstaps=50, n_bins=5, congruent_mask=None, incongruent_mask=None
+    target, spikes, n_bootstraps=50, n_bins=5, congruent_mask=None, incongruent_mask=None
 ):
 
     results = run_decoder_bootstrapping(
         neural_data=spikes,
         trial_labels=target,
         subset_size_D=10,
-        n_bootstraps=n_bootstaps,
+        n_bootstraps=n_bootstraps,
         n_splits=5,
         congruent_mask=congruent_mask,
         incongruent_mask=incongruent_mask,
@@ -275,9 +275,9 @@ def compute_decoder_pid(
     # save results (yes), return this
 
     # skip the all trials
-    information_array = np.zeros((n_bootstaps, 2, 7))
+    information_array = np.zeros((n_bootstraps, 2, 7))
 
-    for iteration in range(n_bootstaps):
+    for iteration in range(n_bootstraps):
 
         # NOTE: use this sometime
 
@@ -293,16 +293,16 @@ def compute_decoder_pid(
         output_b_incon = results[iteration]["probs_B_incong"]
         target_incon = results[iteration]["y_incong"]
 
-        X1_con = np.asarray(equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32)
-        X2_con = np.asarray(equispaced_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32)
+        X1_con = np.asarray(equipopulated_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32)
+        X2_con = np.asarray(equipopulated_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32)
 
         Y_con = np.asarray(target_con, dtype=np.int32)
 
         X1_incon = np.asarray(
-            equispaced_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            equipopulated_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
         )
         X2_incon = np.asarray(
-            equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
         )
         Y_incon = np.asarray(target_incon, dtype=np.int32)
 
@@ -372,7 +372,7 @@ def run_decoder_single_session(session_id, epoch, region):
     information_results, results = compute_decoder_pid(
         target=target_variable,
         spikes=spike_data,
-        n_bootstaps=config["n_bootstraps_decoding"],
+        n_bootstraps=config["n_bootstraps_decoding"],
         n_bins=config["n_bins_decoding"],
         congruent_mask=congruent_flags,
         incongruent_mask=incongruent_flags,
