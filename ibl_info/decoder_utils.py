@@ -56,7 +56,12 @@ from ibl_info.prepare_data_pid import (
     prepare_ephys_data,
     get_new_cinc_intervals_choice,
 )
-from ibl_info.utils import check_config, equipopulated_binning, equipopulated_binning
+from ibl_info.utils import (
+    check_config,
+    equipopulated_binning,
+    equipopulated_binning,
+    equispaced_binning,
+)
 from ibl_info.decoder_pid import compute_information_metrics
 from joblib import Parallel, delayed
 from scipy.stats import wilcoxon
@@ -95,21 +100,39 @@ def recompute(data, n_bins=3):
             output_b_incon = results[iteration]["probs_B_incong"]
             target_incon = results[iteration]["y_incong"]
 
-            X1_con = np.asarray(
-                equipopulated_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
-            )
-            X2_con = np.asarray(
-                equipopulated_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
-            )
+            discretization_type = config["discretize_decoding"]
+
+            if discretization_type == 1:
+
+                X1_con = np.asarray(
+                    equipopulated_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X2_con = np.asarray(
+                    equipopulated_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X1_incon = np.asarray(
+                    equipopulated_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X2_incon = np.asarray(
+                    equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+            elif discretization_type == 2:
+                X1_con = np.asarray(
+                    equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X2_con = np.asarray(
+                    equispaced_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X1_incon = np.asarray(
+                    equispaced_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+                X2_incon = np.asarray(
+                    equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                )
+            else:
+                raise NotImplementedError
 
             Y_con = np.asarray(target_con, dtype=np.int32)
-
-            X1_incon = np.asarray(
-                equipopulated_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
-            )
-            X2_incon = np.asarray(
-                equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
-            )
             Y_incon = np.asarray(target_incon, dtype=np.int32)
 
             information_array[iteration, 0, :] = compute_information_metrics(  # type: ignore
@@ -130,8 +153,15 @@ def process_file(filename, n_bins):
     try:
         data = load_pickle(filename)
         recomputed_data = recompute(data, n_bins)
-        region_name = filename.rsplit("_stim")[0].rsplit("_")[-1]
-        with open(f"./data/generated/recomputed_{region_name}_stim_{n_bins}.pkl", "wb") as f:
+        epoch = config["epoch"]
+        region_name = filename.rsplit(f"_{epoch}")[0].rsplit("_")[-1]
+        if config["discretize_decoding"] == 1:
+            decoding = "equipopulated"
+        elif config["discretize_decoding"] == 2:
+            decoding = "equispaced"
+        with open(
+            f"./data/generated/recomputed_{region_name}_{epoch}_{decoding}_{n_bins}.pkl", "wb"
+        ) as f:
             pkl.dump(recomputed_data, f)
         return (True, f"Processed: {region_name}")
     except Exception as e:

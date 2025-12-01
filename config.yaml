@@ -1,12 +1,13 @@
 min_units_decoding: 20
 min_behav_trials: 10
 n_bins_decoding: 5
+discretize_decoding: 1
 n_bootstraps_decoding : 50
-epoch: "stim"
+epoch: "choice"
 n_bins: 3
 single_cell_filter: True
 mi_filter: True
-decoder_filter: True
+decoder_filter: False
 discretize: 1
 repeats_for_bias_correction: 5
 bias_correction: "qe"
@@ -15,6 +16,7 @@ max_rt: None
 hemisphere: ("left", "right")
 frames: [0,2]
 freeze: None
+recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/allsessions"
 model_locations: "/usr/people/kundu/code/ibl-partial-info-decomp/data/models" 
 # model_locations: "/Users/dkundu/Documents/phd/ibl-partial-info-decomp/models/results_behavioral"
 pq_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/external/stimside_stage2.pqt"
@@ -53,7 +55,7 @@ region_defaults: {
     [ "AUDpo" ],
     [ "AUDv" ],
     [ "FRP" ],
-    [ "MOB" ],
+    [ "MOB" ],  
     [ "MOp" ],
     [ "MOs" ],
     [ "PL" ],

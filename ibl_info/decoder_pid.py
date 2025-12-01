@@ -42,7 +42,7 @@ from ibl_info.prepare_data_pid import (
     prepare_ephys_data,
     get_new_cinc_intervals_choice,
 )
-from ibl_info.utils import check_config, equipopulated_binning, equipopulated_binning
+from ibl_info.utils import check_config, equispaced_binning, equipopulated_binning
 
 
 config = check_config()
@@ -293,17 +293,39 @@ def compute_decoder_pid(
         output_b_incon = results[iteration]["probs_B_incong"]
         target_incon = results[iteration]["y_incong"]
 
-        X1_con = np.asarray(equipopulated_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32)
-        X2_con = np.asarray(equipopulated_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32)
+        discretization_type = config["discretize_decoding"]
+
+        if discretization_type == 1:
+
+            X1_con = np.asarray(
+                equipopulated_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_con = np.asarray(
+                equipopulated_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X1_incon = np.asarray(
+                equipopulated_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_incon = np.asarray(
+                equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+        elif discretization_type == 2:
+            X1_con = np.asarray(
+                equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_con = np.asarray(
+                equispaced_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X1_incon = np.asarray(
+                equispaced_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_incon = np.asarray(
+                equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+        else:
+            raise NotImplementedError
 
         Y_con = np.asarray(target_con, dtype=np.int32)
-
-        X1_incon = np.asarray(
-            equipopulated_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
-        )
-        X2_incon = np.asarray(
-            equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
-        )
         Y_incon = np.asarray(target_incon, dtype=np.int32)
 
         information_array[iteration, 0, :] = compute_information_metrics(  # type: ignore
@@ -435,7 +457,18 @@ def run_flattened(list_of_regions, epoch):
         if information_pickle is not None:
             region_data[region][eid] = information_pickle
 
-    suffix = "decoder_alldata_goodsessions_projections"
+    n_bins = config["n_bins_decoding"]
+    discretizer = config["discretize_decoding"]
+
+    if config["decoder_filter"] == True:
+        suffix = "decoder_goodsessions_projections"
+    else:
+        suffix = "decoder_allsessions_projections"
+
+    if discretizer == 1:
+        suffix += f"_equipopulated_{n_bins}"
+    elif discretizer == 2:
+        suffix += f"_equispaced_{n_bins}"
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():
@@ -484,7 +517,7 @@ if __name__ == "__main__":
         username="intbrainlab",
     )
 
-    run_flattened(important_regions, "stim")
+    run_flattened(important_regions, "choice")
     # one = ONE()
     # unit_df = bwm_units(one)
     # region = "ZI"
