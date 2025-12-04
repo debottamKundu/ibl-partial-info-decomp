@@ -260,7 +260,7 @@ def individual_region_sems(data):
     return rsi_congruent, rsi_incongruent, redundancy, synergy
 
 
-def congregate_data(files):
+def congregate_data(files, epoch):
 
     region_names = []
     rsi_congruent = []
@@ -274,7 +274,7 @@ def congregate_data(files):
         if data == {}:
             continue
 
-        region_name = filename.rsplit("_stim")[0].rsplit("_")[-1]
+        region_name = filename.rsplit(f"_{epoch}")[0].rsplit("_")[-1]
         region_names.append(region_name)
 
         rsi_congruent_means, rsi_incongruent_means, redundancy_means, synergy_means = (
