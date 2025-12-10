@@ -148,17 +148,98 @@ def recompute(data, n_bins=3):
     return recomputed_data
 
 
+def return_congruent_incongruent_flags(one, animal_id, epoch):
+
+    trials, mask = load_trials_and_mask(
+        one, animal_id, exclude_nochoice=True, exclude_unbiased=True
+    )
+    trials = trials[mask]
+
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials, epoch)
+        )
+
+    return congruent_flags.values, incongruent_flags.values
+
+
+def recompute_with_discretization_on_all(data, epoch, n_bins):
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
+    recomputed_data = {}
+    for animal_id in tqdm(data.keys(), desc="Animals"):
+        animal = data[animal_id]
+        results = animal["decoding_results"]
+        n_bootstraps = len(results)
+
+        congruent_flags, incongruent_flags = return_congruent_incongruent_flags(
+            one,
+            animal_id,
+            epoch,
+        )
+
+        information_array = np.zeros((n_bootstraps, 2, 7))
+
+        temp = {}
+        for iteration in tqdm(range(n_bootstraps), desc="Bootstraps", leave=False):
+            output_a_all = results[iteration]["probs_A"]
+            output_b_all = results[iteration]["probs_B"]
+            target_all = results[iteration]["y_true"]
+
+            target_con = results[iteration]["y_cong"]
+            target_incon = results[iteration]["y_incong"]
+            # discretization_type = config["discretize_decoding"]
+
+            equipop_output_a = equipopulated_binning(output_a_all[:, 0], n_bins=n_bins)
+            equipop_output_b = equipopulated_binning(output_b_all[:, 0], n_bins=n_bins)
+
+            X1_con = np.asarray(equipop_output_a[congruent_flags], dtype=np.int32)
+            X2_con = np.asarray(equipop_output_b[congruent_flags], dtype=np.int32)
+
+            X1_incon = np.asarray(equipop_output_a[incongruent_flags], dtype=np.int32)
+            X2_incon = np.asarray(equipop_output_b[incongruent_flags], dtype=np.int32)
+
+            Y_con = np.asarray(target_con, dtype=np.int32)
+            Y_incon = np.asarray(target_incon, dtype=np.int32)
+
+            information_array[iteration, 0, :] = compute_information_metrics(  # type: ignore
+                Y_con, X1_con, X2_con
+            )
+
+            information_array[iteration, 1, :] = compute_information_metrics(  # type: ignore
+                Y_incon, X1_incon, X2_incon
+            )
+            temp["information"] = information_array
+        recomputed_data[animal_id] = temp
+
+    return recomputed_data
+
+
 def process_file(filename, n_bins):
 
     try:
         data = load_pickle(filename)
-        recomputed_data = recompute(data, n_bins)
+        if config["subset"]:
+            recomputed_data = recompute_with_discretization_on_all(data, config["epoch"], n_bins)
+        else:
+            recomputed_data = recompute(data, n_bins)
         epoch = config["epoch"]
         region_name = filename.rsplit(f"_{epoch}")[0].rsplit("_")[-1]
         if config["discretize_decoding"] == 1:
             decoding = "equipopulated"
         elif config["discretize_decoding"] == 2:
             decoding = "equispaced"
+        elif config["discretize_decoding"] == 3:
+            decoding = "equipop_subset"
         with open(
             f"./data/generated/recomputed_{region_name}_{epoch}_{decoding}_{n_bins}.pkl", "wb"
         ) as f:
@@ -323,7 +404,11 @@ def plot_all_rsis(rsi_congruent, rsi_incongruent):
     else:
         p_value_text = "n.s."  # Not significant
     x1, x2 = 0, 1  # 0 and 1 correspond to the index of the bars
-    line_y = np.max([a, b]) + 1.5 * np.max([c, d])  # Position the line above the taller bar
+
+    if np.max([a, b]) > 0:
+        line_y = np.max([a, b]) + 1.5 * np.max([c, d])  # Position the line above the taller bar
+    else:
+        line_y = np.min([a, b]) - 1.5 * np.max([c, d])
 
     # Plot a horizontal line
     plt.plot([x1, x2], [line_y, line_y], color="black", linewidth=1)
@@ -420,6 +505,204 @@ def plot_regions_rsi(rsi_incongruent, rsi_congruent, region_names):
     ax.set_xticks(np.arange(len(region_names)), region_names, rotation=90)
     ax.set_ylabel("RSI")
     ax.legend()
+
+
+def accuracy_per_region(fx):
+    mean_accuracies = []
+    for k in fx:
+        animal = fx[k]["decoding_results"]
+        accuracies = []
+        for idx in range(len(animal)):
+            aca = animal[idx]["accuracy_A"]
+            acb = animal[idx]["accuracy_B"]
+            accuracies.append(np.mean([aca, acb]))
+        mean_accuracies.append(np.mean(accuracies))
+
+    return mean_accuracies
+
+
+def get_mean_accuracies(files, epoch):
+
+    info_dict = {}
+    for idx in range(len(files)):
+        filename = files[idx]
+        with open(filename, "rb") as f:
+            data = pkl.load(f)
+
+        mean_accuracies = accuracy_per_region(data)
+        region_name = filename.rsplit(f"_{epoch}")[0].rsplit("_")[-1]
+        info_dict[region_name] = mean_accuracies
+
+    return info_dict
+
+
+def plot_accuracies(files, epoch, region_names):
+    accuracies = get_mean_accuracies(files, epoch)
+
+    mean_per_region = []
+
+    for k in accuracies.keys():
+        if len(accuracies[k]) == 0:
+            continue
+        mean_per_region.append(
+            [np.mean(accuracies[k]), np.std(accuracies[k]) / np.sqrt(len(accuracies[k]))]
+        )
+    mean_per_region = np.asarray(mean_per_region)
+    individual_values = []
+    for x in accuracies.keys():
+        if len(accuracies[x]) == 0:
+            continue
+        else:
+            individual_values.append(accuracies[x])
+    fig, ax = plt.subplots(figsize=(7, 4))
+    sns.stripplot(individual_values, color="grey", alpha=0.75, edgecolor="k", linewidth=0.5)
+    sns.despine()
+    ax.bar(np.arange(len(mean_per_region)), mean_per_region[:, 0], edgecolor="k", alpha=0.75)
+    ax.axhline(0.5, linestyle="--")
+    ax.set_xticks(np.arange(len(region_names)), region_names, rotation=90)
+    ax.set_ylabel("Balanced accuracy")
+
+    ax.set_ylim(0, 0.95)
+    ax.set_title(f"{epoch}")
+
+
+def compute_means(
+    delta_congruent_array, delta_incongruent_array, delta_redundancy_array, delta_synergy_array
+):
+    rsi_congruent = np.nanmean(delta_congruent_array, axis=0)
+    rsi_incongruent = np.nanmean(delta_incongruent_array, axis=0)
+    redundancy = np.nanmean(delta_redundancy_array, axis=0)
+    synergy = np.nanmean(delta_synergy_array, axis=0)
+
+    return rsi_congruent, rsi_incongruent, redundancy, synergy
+
+
+def compute_sems(
+    delta_congruent_array, delta_incongruent_array, delta_redundancy_array, delta_synergy_array
+):
+    rsi_congruent = np.nanstd(delta_congruent_array, axis=0) / np.sqrt(len(delta_congruent_array))
+    rsi_incongruent = np.nanstd(delta_incongruent_array, axis=0) / np.sqrt(
+        len(delta_incongruent_array)
+    )
+    redundancy = np.nanstd(delta_redundancy_array, axis=0) / np.sqrt(len(delta_redundancy_array))
+    synergy = np.nanstd(delta_synergy_array, axis=0) / np.sqrt(len(delta_synergy_array))
+
+    return rsi_congruent, rsi_incongruent, redundancy, synergy
+
+
+def pids_per_region_both(region_choice, region_stim, region):
+
+    delta_congruent_array = []
+    delta_incongruent_array = []
+    delta_redundancy_array = []
+    delta_synergy_array = []
+    for eid in region_choice.keys():
+
+        if eid not in region_stim.keys():
+            print(f"{eid} not in stim for region {region}")
+        rsi_congruent_choice, rsi_incongruent_choice, synergy_choice, redundancy_choice = (
+            collapse_animal(region_choice[eid])
+        )
+        rsi_congruent_stim, rsi_incongruent_stim, synergy_stim, redundancy_stim = collapse_animal(
+            region_stim[eid]
+        )
+        delta_congruent = rsi_congruent_choice - rsi_congruent_stim
+        delta_incongruent = rsi_incongruent_choice - rsi_incongruent_stim
+
+        delta_redundancy = redundancy_choice - redundancy_stim
+        delta_synergy = synergy_choice - synergy_stim
+
+        delta_congruent_array.append(delta_congruent)
+        delta_incongruent_array.append(delta_incongruent)
+        delta_redundancy_array.append(delta_redundancy)
+        delta_synergy_array.append(delta_synergy)
+
+    return (
+        np.asarray(delta_congruent_array),
+        np.asarray(delta_incongruent_array),
+        np.asarray(delta_redundancy_array),
+        np.asarray(delta_synergy_array),
+    )
+
+
+def compute_delta_region(region_choice, region_stim, region_name):
+
+    delta_congruent, delta_incongruent, delta_redundancy, delta_synergy = pids_per_region_both(
+        region_choice, region_stim, region_name
+    )
+
+    rsi_congruent_means, rsi_incongruent_means, redundancy_means, synergy_means = compute_means(
+        delta_congruent, delta_incongruent, delta_redundancy, delta_synergy
+    )
+
+    rsi_congruent_sems, rsi_incongruent_sems, redundancy_sems, synergy_sems = compute_sems(
+        delta_congruent, delta_incongruent, delta_redundancy, delta_synergy
+    )
+
+    return (
+        rsi_congruent_means,
+        rsi_incongruent_means,
+        redundancy_means,
+        synergy_means,
+        rsi_congruent_sems,
+        rsi_incongruent_sems,
+        redundancy_sems,
+        synergy_sems,
+    )
+
+
+def compute_deltas_all(files_choice, files_stim):
+
+    region_names = []
+    rsi_congruent = []
+    rsi_incongruent = []
+    # redundancy = []
+    # synergy = []
+    for idx in range(len(files_choice)):
+
+        f_choice = files_choice[idx]
+        f_stim = files_stim[idx]
+
+        r_choice = f_choice.rsplit("_choice")[0].rsplit("_")[-1]
+        r_stim = f_stim.rsplit("_stim")[0].rsplit("_")[-1]
+
+        if r_choice != r_stim:
+            raise ValueError
+
+        with open(files_choice[idx], "rb") as f:
+            region_choice = pkl.load(f)
+
+        with open(files_stim[idx], "rb") as f:
+            region_stim = pkl.load(f)
+
+        if len(region_choice) == 0 or len(region_stim) == 0:
+            print(f"Ey: {r_choice}, something is empty")
+            continue
+
+        (
+            rsi_congruent_means,
+            rsi_incongruent_means,
+            redundancy_means,
+            synergy_means,
+            rsi_congruent_sems,
+            rsi_incongruent_sems,
+            redundancy_sems,
+            synergy_sems,
+        ) = compute_delta_region(region_choice, region_stim, r_choice)
+
+        rsi_congruent.append([rsi_congruent_means, rsi_congruent_sems])
+        rsi_incongruent.append([rsi_incongruent_means, rsi_incongruent_sems])
+        # redundancy.append([redundancy_means, redundancy_sems])
+        # synergy.append([synergy_means, synergy_sems])
+        region_names.append(r_choice)
+
+    return (
+        np.asarray(rsi_congruent),
+        np.asarray(rsi_incongruent),
+        # np.asarray(redundancy),
+        # np.asarray(synergy),
+        region_names,
+    )
 
 
 if __name__ == "__main__":

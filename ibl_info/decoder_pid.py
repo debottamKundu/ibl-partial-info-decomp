@@ -149,12 +149,9 @@ def run_decoder_bootstrapping(
         # Placeholders for full dataset predictions
         n_classes = len(np.unique(y))
 
-        # Initialize with zeros.
-        # Since we iterate through all folds, every index will be filled exactly once.
         probs_A_all = np.zeros((n_trials, n_classes))
         probs_B_all = np.zeros((n_trials, n_classes))
 
-        # 3. K-Fold Cross Validation Loop
         skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=None)
 
         for train_idx, test_idx in skf.split(X, y):
@@ -172,7 +169,6 @@ def run_decoder_bootstrapping(
                 X_train_B = scaler_B.fit_transform(X_train_B)
                 X_test_B = scaler_B.transform(X_test_B)
 
-            # --- SAMPLE WEIGHTS ---
             train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
 
             # Train Decoders
@@ -225,7 +221,6 @@ def run_decoder_bootstrapping(
             # Full aligned arrays
             "probs_A": probs_A_all,
             "probs_B": probs_B_all,
-            # Subsetted arrays (convenience)
             "probs_A_cong": probs_A_all[cong_indices] if cong_indices is not None else None,
             "probs_A_incong": probs_A_all[incong_indices] if incong_indices is not None else None,
             "probs_B_cong": probs_B_all[cong_indices] if cong_indices is not None else None,
@@ -241,6 +236,9 @@ def run_decoder_bootstrapping(
             "y_incong": y[incong_indices] if incong_indices is not None else None,
             "neurons_A_indices": idx_A,
             "neurons_B_indices": idx_B,
+            # also save cong and incong indices
+            "cong_indices": cong_indices,
+            "incong_indices": incong_indices,
         }
         run_data.update(metrics_sub)
 
@@ -260,7 +258,13 @@ def compute_information_metrics(target, sourcea, sourceb):
 
 
 def compute_decoder_pid(
-    target, spikes, n_bootstraps=50, n_bins=5, congruent_mask=None, incongruent_mask=None
+    target,
+    spikes,
+    n_bootstraps=50,
+    n_bins=5,
+    congruent_mask=None,
+    incongruent_mask=None,
+    decoder_output_only=False,
 ):
 
     results = run_decoder_bootstrapping(
@@ -272,7 +276,9 @@ def compute_decoder_pid(
         congruent_mask=congruent_mask,
         incongruent_mask=incongruent_mask,
     )
-    # save results (yes), return this
+
+    if decoder_output_only:
+        return results, []
 
     # skip the all trials
     information_array = np.zeros((n_bootstraps, 2, 7))
@@ -398,6 +404,7 @@ def run_decoder_single_session(session_id, epoch, region):
         n_bins=config["n_bins_decoding"],
         congruent_mask=congruent_flags,
         incongruent_mask=incongruent_flags,
+        decoder_output_only=config["decoder_output_only"],
     )
 
     information_pickle["information"] = information_results
@@ -470,11 +477,14 @@ def run_flattened(list_of_regions, epoch):
     elif discretizer == 2:
         suffix += f"_equispaced_{n_bins}"
 
+    if config["decoder_output_only"] == True:
+        suffix += "_outputonly"
+    else:
+        suffix += "_decomposition"
+
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():
-        with open(
-            f"./data/generated/selective_decomposition_{region}_{epoch}_{suffix}.pkl", "wb"
-        ) as f:
+        with open(f"./data/generated/selective_{region}_{epoch}_{suffix}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
 
     print("Done!")
