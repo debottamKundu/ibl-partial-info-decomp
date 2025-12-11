@@ -197,10 +197,16 @@ def recompute_with_discretization_on_all(data, epoch, n_bins):
 
             target_con = results[iteration]["y_cong"]
             target_incon = results[iteration]["y_incong"]
-            # discretization_type = config["discretize_decoding"]
+            discretization_type = config["discretize_decoding"]
 
-            equipop_output_a = equipopulated_binning(output_a_all[:, 0], n_bins=n_bins)
-            equipop_output_b = equipopulated_binning(output_b_all[:, 0], n_bins=n_bins)
+            if discretization_type == 3:
+                equipop_output_a = equipopulated_binning(output_a_all[:, 0], n_bins=n_bins)
+                equipop_output_b = equipopulated_binning(output_b_all[:, 0], n_bins=n_bins)
+            elif discretization_type == 4:
+                equipop_output_a = equispaced_binning(output_a_all[:, 0], n_bins=n_bins)
+                equipop_output_b = equispaced_binning(output_b_all[:, 0], n_bins=n_bins)
+            else:
+                raise NotImplementedError
 
             X1_con = np.asarray(equipop_output_a[congruent_flags], dtype=np.int32)
             X2_con = np.asarray(equipop_output_b[congruent_flags], dtype=np.int32)
@@ -240,6 +246,10 @@ def process_file(filename, n_bins):
             decoding = "equispaced"
         elif config["discretize_decoding"] == 3:
             decoding = "equipop_subset"
+        elif config["discretize_decoding"] == 4:
+            decoding = "equispaced_subset"
+        else:
+            raise NotImplementedError
         with open(
             f"./data/generated/recomputed_{region_name}_{epoch}_{decoding}_{n_bins}.pkl", "wb"
         ) as f:
@@ -707,7 +717,33 @@ def compute_deltas_all(files_choice, files_stim):
 
 if __name__ == "__main__":
 
-    location = config["recompute_location"]
+    location = "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
     files = glob(f"{location}/*.pkl")
-    n_bins = config["n_bins_decoding"]
-    save_recomputed_data_parallel(files, n_bins)
+
+    config["epoch"] = "stim"
+    config["discretize_decoding"] = 4
+    save_recomputed_data_parallel(files, 3)
+    save_recomputed_data_parallel(files, 4)
+
+    # chance locations and rerun
+
+    location = "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/choice/allsessions/equipopulated_5/"
+    files = glob(f"{location}/*.pkl")
+    config["epoch"] = "choice"
+
+    save_recomputed_data_parallel(files, 3)
+    save_recomputed_data_parallel(files, 4)
+
+    location = "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/goodsessions/equidistant_5bins/"
+    files = glob(f"{location}/*.pkl")
+    config["epoch"] = "stim"
+
+    save_recomputed_data_parallel(files, 3)
+    save_recomputed_data_parallel(files, 4)
+
+    location = "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/choice/goodsessions/equipopulated_5/"
+    files = glob(f"{location}/*.pkl")
+    config["epoch"] = "choice"
+
+    save_recomputed_data_parallel(files, 3)
+    save_recomputed_data_parallel(files, 4)
