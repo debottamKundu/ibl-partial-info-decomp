@@ -136,9 +136,10 @@ def wifi_pairs_of_regions(one, eid, epoch):
                 incongruent_mask=incongruent_flags,
                 decoder_output_only=config["decoder_output_only"],
             )
-
-            frame_pickle[key]["information_results"] = information_results
-            frame_pickle[key]["results"] = results
+            temp = {}
+            temp["information_results"] = information_results
+            temp["results"] = results
+            frame_pickle[key] = temp
 
         region_pickle[frame_idx] = frame_pickle
 
