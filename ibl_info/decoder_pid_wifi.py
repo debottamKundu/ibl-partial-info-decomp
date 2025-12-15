@@ -62,15 +62,15 @@ def check_minimum(data_epoch, actual_regions):
     return new_data_epoch, regions_used_acronyms
 
 
-def wifi_pairs_of_regions(eid, epoch):
+def wifi_pairs_of_regions(one, eid, epoch):
 
     align_event = epoch_events(epoch)  # should default to stimon
-    one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        password="international",
-        silent=True,
-        username="intbrainlab",
-    )
+    # one = ONE(
+    #     base_url="https://openalyx.internationalbrainlab.org",
+    #     password="international",
+    #     silent=True,
+    #     username="intbrainlab",
+    # )
 
     # probably this one doesnt work
     # use sessionloader
@@ -145,7 +145,7 @@ def wifi_pairs_of_regions(eid, epoch):
     return region_pickle
 
 
-def process_session(session_id):
+def process_session(one, session_id):
 
     eid = session_id
     epoch = config["epoch"]
@@ -165,8 +165,7 @@ def process_session(session_id):
         suffix += "_decomposition"
 
     try:
-        region_pickle = wifi_pairs_of_regions(eid, epoch)
-
+        region_pickle = wifi_pairs_of_regions(one, eid, epoch)
 
         with open(f"./data/generated/{eid}_wfi_{suffix}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
@@ -190,12 +189,11 @@ def run_wfi():
     # we will parallelize this
     n_cores = os.cpu_count() - 4  # type: ignore
 
-    results = Parallel(n_jobs=n_cores, verbose=10)(
-        delayed(process_session)(session_id) for session_id in sessions   # type: ignore
-    )
-
-    print(results)
+    for session in tqdm(sessions, desc="sessions"):  # type: ignore
+        id = process_session(one, session)
+        print(id)
     # n_cores = os.cpu_count() - 4  # type: ignore
+
 
 if __name__ == "__main__":
     run_wfi()
