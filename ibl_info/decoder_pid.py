@@ -26,6 +26,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
+from ibl_info.dual_decoders import run_dual_region_decoder_bootstrapping
 from ibl_info.selective_decomposition import filter_eids
 from sklearn.svm import SVC
 from tqdm import tqdm
@@ -259,29 +260,45 @@ def compute_information_metrics(target, sourcea, sourceb):
 
 def compute_decoder_pid(
     target,
-    spikes,
+    spikes_a,
+    spikes_b=[],
     n_bootstraps=50,
     n_bins=5,
     congruent_mask=None,
     incongruent_mask=None,
     decoder_output_only=False,
 ):
-
-    results = run_decoder_bootstrapping(
-        neural_data=spikes,
-        trial_labels=target,
-        subset_size_D=10,
-        n_bootstraps=n_bootstraps,
-        n_splits=5,
-        congruent_mask=congruent_mask,
-        incongruent_mask=incongruent_mask,
-    )
+    print(n_bins)
+    discretization_type = config["discretize_decoding"]
+    print(discretization_type)
+    if len(spikes_b) == 0:
+        results = run_decoder_bootstrapping(
+            neural_data=spikes_a,
+            trial_labels=target,
+            subset_size_D=10,
+            n_bootstraps=n_bootstraps,
+            n_splits=5,
+            congruent_mask=congruent_mask,
+            incongruent_mask=incongruent_mask,
+        )
+    else:
+        results = run_dual_region_decoder_bootstrapping(
+            spikes_a,
+            spikes_b,
+            target,
+            subset_size_D=config["wifi_subset"],
+            n_bootstraps=config["n_bootstraps_decoding"],
+            n_splits=5,
+            congruent_mask=congruent_mask,
+            incongruent_mask=incongruent_mask,
+            scale=True,
+        )
 
     if decoder_output_only:
         return results, []
 
     # skip the all trials
-    information_array = np.zeros((n_bootstraps, 2, 7))
+    information_array = np.zeros((n_bootstraps, 3, 7))
 
     for iteration in range(n_bootstraps):
 
@@ -315,6 +332,14 @@ def compute_decoder_pid(
             X2_incon = np.asarray(
                 equipopulated_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
             )
+
+            X1_all = np.asarray(
+                equipopulated_binning(output_a_all[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_all = np.asarray(
+                equipopulated_binning(output_b_all[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+
         elif discretization_type == 2:
             X1_con = np.asarray(
                 equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
@@ -328,9 +353,17 @@ def compute_decoder_pid(
             X2_incon = np.asarray(
                 equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
             )
+
+            X1_all = np.asarray(
+                equispaced_binning(output_a_all[:, 0], n_bins=n_bins), dtype=np.int32
+            )
+            X2_all = np.asarray(
+                equispaced_binning(output_b_all[:, 0], n_bins=n_bins), dtype=np.int32
+            )
         else:
             raise NotImplementedError
 
+        Y_all = np.asarray(target_all, dtype=np.int32)
         Y_con = np.asarray(target_con, dtype=np.int32)
         Y_incon = np.asarray(target_incon, dtype=np.int32)
 
@@ -340,6 +373,10 @@ def compute_decoder_pid(
 
         information_array[iteration, 1, :] = compute_information_metrics(  # type: ignore
             Y_incon, X1_incon, X2_incon
+        )
+
+        information_array[iteration, 2, :] = compute_information_metrics(  # type: ignore
+            Y_all, X1_all, X2_all
         )
 
     return information_array, results
@@ -399,7 +436,8 @@ def run_decoder_single_session(session_id, epoch, region):
 
     information_results, results = compute_decoder_pid(
         target=target_variable,
-        spikes=spike_data,
+        spikes_a=spike_data,
+        spikes_b=[],
         n_bootstraps=config["n_bootstraps_decoding"],
         n_bins=config["n_bins_decoding"],
         congruent_mask=congruent_flags,

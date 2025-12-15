@@ -209,6 +209,8 @@ def check_config():
 def epoch_events(epoch):
     if epoch == "stim":
         return "stimOn_times"
+    elif epoch == "choice":
+        return "firstMovement_times"
     else:
         raise NotImplementedError
 

@@ -1,11 +1,11 @@
 min_units_decoding: 20
 min_behav_trials: 10
 n_bins_decoding: 3
-subset: True
-discretize_decoding: 1
+subset: False
+discretize_decoding: 2
 epoch: "stim"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
-decoder_output_only: True
+decoder_output_only: False
 n_bootstraps_decoding : 50
 n_bins: 3
 single_cell_filter: True
@@ -84,3 +84,6 @@ region_defaults: {
     [ "VISpor" ],
     [ "VISrl" ],
   ]}
+widefield_regions:  [ ["MOs"], ["SSp-ul"], ["VISam"], ["VISl"], ["VISp"], ["ACAd"], ["PL"], ["RSPv"], ["VISa"],
+]
+wifi_subset: 15

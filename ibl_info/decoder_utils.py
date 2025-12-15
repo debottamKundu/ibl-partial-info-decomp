@@ -59,7 +59,6 @@ from ibl_info.prepare_data_pid import (
 from ibl_info.utils import (
     check_config,
     equipopulated_binning,
-    equipopulated_binning,
     equispaced_binning,
 )
 from ibl_info.decoder_pid import compute_information_metrics
@@ -280,12 +279,12 @@ def collapse_animal(animal):
     # the 7 is mia, mib, tvmi, unqa, unqb, red, syn
     rsi_congruent = np.nanmean(
         animal["information"][:, 0, 2]
-        - (animal["information"][:, 0, 0] + animal["information"][:, 0, 0]),
+        - (animal["information"][:, 0, 0] + animal["information"][:, 0, 1]),
         axis=0,
     )
     rsi_incongruent = np.nanmean(
         animal["information"][:, 1, 2]
-        - (animal["information"][:, 1, 0] + animal["information"][:, 1, 0]),
+        - (animal["information"][:, 1, 0] + animal["information"][:, 1, 1]),
         axis=0,
     )
     synergy = np.nanmean(animal["information"][:, :, 6], axis=0)
@@ -366,6 +365,7 @@ def congregate_data(files, epoch):
             continue
 
         region_name = filename.rsplit(f"_{epoch}")[0].rsplit("_")[-1]
+        # print(region_name)
         region_names.append(region_name)
 
         rsi_congruent_means, rsi_incongruent_means, redundancy_means, synergy_means = (

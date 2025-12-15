@@ -52,13 +52,7 @@ def cleanup_and_discretize(data_epoch, actual_regions):
     return discretized_data_epoch, regions_used_acronyms
 
 
-def region_combinations(n_regions):
 
-    combinations_regions = []
-    for x in combinations(range(n_regions), 2):
-        combinations_regions.append([x[0], x[1]])
-    combinations_regions = np.asarray(combinations_regions)
-    return combinations_regions
 
 
 def information_for_region_pair(region_a, region_b, target):
