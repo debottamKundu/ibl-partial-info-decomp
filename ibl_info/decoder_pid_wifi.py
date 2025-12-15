@@ -4,7 +4,7 @@
 ## i think it should more or less be the same
 
 import itertools
-from joblib import Parallel
+from joblib import Parallel, delayed
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -145,9 +145,10 @@ def wifi_pairs_of_regions(eid, epoch):
     return region_pickle
 
 
-def process_session(task_tuple):
+def process_session(session_id):
 
-    eid, epoch = task_tuple
+    eid = session_id
+    epoch = config["epoch"]
     n_bins = config["n_bins_decoding"]
     discretizer = config["discretize_decoding"]
 
@@ -190,7 +191,7 @@ def run_wfi():
     n_cores = os.cpu_count() - 4  # type: ignore
 
     results = Parallel(n_jobs=n_cores, verbose=10)(
-        delayed(process_session)(session_id, save_info) for session_id in sessions  # type: ignore
+        delayed(process_session)(session_id) for session_id in sessions   # type: ignore
     )
 
     print(results)
