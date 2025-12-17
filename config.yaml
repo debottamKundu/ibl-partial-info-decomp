@@ -3,7 +3,7 @@ min_behav_trials: 10
 n_bins_decoding: 3
 subset: False
 discretize_decoding: 2
-epoch: "stim"
+epoch: "choice"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
 decoder_output_only: False
 n_bootstraps_decoding : 50
@@ -17,7 +17,7 @@ bias_correction: "qe"
 min_rt: 0.08
 max_rt: None
 hemisphere: ("left", "right")
-frames: [0,2]
+frames: [-2,0]
 freeze: None
 model_locations: "/usr/people/kundu/code/ibl-partial-info-decomp/data/models" 
 # model_locations: "/Users/dkundu/Documents/phd/ibl-partial-info-decomp/models/results_behavioral"

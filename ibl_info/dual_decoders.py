@@ -190,3 +190,82 @@ def run_dual_region_decoder_bootstrapping(
 
     print("Bootstrapping complete.")
     return results
+
+
+def compute_null_distribution(
+    neural_data_A,
+    neural_data_B,
+    trial_labels,
+    subset_size_D,
+    n_permutations=50,  # Standard is usually 1000 or 10000
+    n_splits=5,
+    scale=True,
+):
+    """
+    Generates a null distribution of accuracies by shuffling trial labels.
+    """
+
+    # Setup
+    X_A = neural_data_A
+    X_B = neural_data_B
+    y = trial_labels.flatten()
+    n_trials, n_neurons_A = X_A.shape
+    _, n_neurons_B = X_B.shape
+
+    null_metrics = {"acc_A": [], "acc_B": []}
+
+    print(f"Generating Null Distribution ({n_permutations} permutations)...")
+
+    for i in range(n_permutations):
+        # 1. Shuffle Labels (The Crucial Step)
+        # We shuffle y once per permutation so the decoder learns noise
+        y_shuffled = np.random.permutation(y)
+
+        # 2. Subsample Neurons (To match the variance of your real run)
+        idx_A = np.random.permutation(n_neurons_A)[:subset_size_D]
+        idx_B = np.random.permutation(n_neurons_B)[:subset_size_D]
+
+        X_sub_A = X_A[:, idx_A]
+        X_sub_B = X_B[:, idx_B]
+
+        # 3. CV Loop (Fast version)
+        # We collect predictions across folds to get one accuracy score per permutation
+        preds_A_all = np.zeros(n_trials)
+        preds_B_all = np.zeros(n_trials)
+
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=None)
+
+        # Note: Split based on the SHUFFLED labels to maintain class balance in folds
+        for train_idx, test_idx in skf.split(np.zeros(n_trials), y_shuffled):
+
+            # Slice
+            X_train_A, X_test_A = X_sub_A[train_idx], X_sub_A[test_idx]
+            X_train_B, X_test_B = X_sub_B[train_idx], X_sub_B[test_idx]
+            y_train = y_shuffled[train_idx]
+
+            # Scale
+            if scale:
+                scaler_A = StandardScaler().fit(X_train_A)
+                X_train_A = scaler_A.transform(X_train_A)
+                X_test_A = scaler_A.transform(X_test_A)
+
+                scaler_B = StandardScaler().fit(X_train_B)
+                X_train_B = scaler_B.transform(X_train_B)
+                X_test_B = scaler_B.transform(X_test_B)
+
+            # Fit (Lightweight settings for speed)
+            clf_A = LogisticRegression(solver="lbfgs", max_iter=200, class_weight="balanced")
+            clf_B = LogisticRegression(solver="lbfgs", max_iter=200, class_weight="balanced")
+
+            clf_A.fit(X_train_A, y_train)
+            clf_B.fit(X_train_B, y_train)
+
+            # Predict
+            preds_A_all[test_idx] = clf_A.predict(X_test_A)
+            preds_B_all[test_idx] = clf_B.predict(X_test_B)
+
+        # 4. Store Score
+        null_metrics["acc_A"].append(accuracy_score(y_shuffled, preds_A_all))
+        null_metrics["acc_B"].append(accuracy_score(y_shuffled, preds_B_all))
+
+    return null_metrics

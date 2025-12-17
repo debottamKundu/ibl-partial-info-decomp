@@ -4,6 +4,7 @@
 ## i think it should more or less be the same
 
 import itertools
+import concurrent.futures
 from joblib import Parallel, delayed
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.discriminant_analysis import StandardScaler
@@ -13,6 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import compute_sample_weight
 from tqdm import tqdm
 from ibl_info.decoder_pid import compute_decoder_pid
+from ibl_info.dual_decoders import compute_null_distribution
 from ibl_info.prepare_data_pid import get_new_cinc_intervals, get_new_cinc_intervals_choice
 from ibl_info.utils import check_config, epoch_events
 from one.api import ONE
@@ -125,7 +127,6 @@ def wifi_pairs_of_regions(one, eid, epoch):
 
             key = f"{used_regions[region_a_idx]}_{used_regions[region_b_idx]}"
 
-            # now this should be the same (me thinks)
             information_results, results = compute_decoder_pid(
                 target=target_variable,
                 spikes_a=region_a,
@@ -146,6 +147,97 @@ def wifi_pairs_of_regions(one, eid, epoch):
     return region_pickle
 
 
+def null_pairs_of_regions(eid, epoch):
+    # no discretizer or bins
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
+
+    align_event = epoch_events(epoch)  # should default to stimon
+    sl = SessionLoader(one, eid=eid)
+    trials, mask = load_trials_and_mask(
+        one,
+        eid,
+        sess_loader=sl,  # using session loader to load trials so that we get proper probability
+        exclude_nochoice=True,
+        exclude_unbiased=True,
+    )
+    trials = trials[mask]
+    align_times = trials[align_event].values
+
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials, epoch)
+        )
+
+    # remember there are pairs of regions now
+    all_regions = config["widefield_regions"]
+    data_epoch, actual_regions = prepare_widefield(
+        one,
+        eid,
+        hemisphere=config["hemisphere"],
+        regions=all_regions,
+        align_times=align_times,
+        frame_window=config["frames"],
+        functional_channel=470,
+        stage_only=False,
+    )
+
+    total_frames = data_epoch[0].shape[1]  # type: ignore
+    data_epoch, used_regions = check_minimum(data_epoch, actual_regions)
+    region_combos = region_combinations(len(used_regions))  # type: ignore
+
+    region_pickle = {}
+    for frame_idx in range(total_frames):
+        frame_pickle = {}
+        for region_pairs in tqdm(region_combos, desc="region pairs "):
+
+            region_a_idx = region_pairs[0]
+            region_b_idx = region_pairs[1]
+
+            region_a = data_epoch[region_a_idx][frame_idx, :].T
+            region_b = data_epoch[region_b_idx][frame_idx, :].T
+
+            key = f"{used_regions[region_a_idx]}_{used_regions[region_b_idx]}"
+
+            null_results = compute_null_distribution(
+                neural_data_A=region_a,
+                neural_data_B=region_b,
+                trial_labels=target_variable,
+                subset_size_D=config["wifi_subset"],
+                n_permutations=config["n_bootstraps_decoding"],
+            )
+            frame_pickle[key] = null_results
+        region_pickle[frame_idx] = frame_pickle
+    return region_pickle
+
+
+def process_null_distributions(session_id):
+    eid = session_id
+    epoch = config["epoch"]
+    suffix = ""
+    if config["null_computation"] == True:
+        suffix += "_null"
+
+    try:
+        region_pickle = null_pairs_of_regions(eid, epoch)
+
+        with open(f"./data/generated/{eid}_wfi_{suffix}_{epoch}.pkl", "wb") as f:
+            pkl.dump(region_pickle, f)
+        return 1
+    except Exception as e:
+        print(e)
+        return -1
+
+
 def process_session(one, session_id):
 
     eid = session_id
@@ -160,8 +252,8 @@ def process_session(one, session_id):
     elif discretizer == 2:
         suffix += f"_equispaced_{n_bins}"
 
-    if config["decoder_output_only"] == True:
-        suffix += "_outputonly"
+    if config["null_computation"] == True:
+        suffix += "_null"
     else:
         suffix += "_decomposition"
 
@@ -177,6 +269,13 @@ def process_session(one, session_id):
 
 
 def run_wfi():
+    for session in tqdm(sessions, desc="sessions"):  # type: ignore
+        id = process_session(one, session)
+        print(id)
+    # n_cores = os.cpu_count() - 4  # type: ignore
+
+
+if __name__ == "__main__":
 
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
@@ -190,11 +289,21 @@ def run_wfi():
     # we will parallelize this
     n_cores = os.cpu_count() - 4  # type: ignore
 
-    for session in tqdm(sessions, desc="sessions"):  # type: ignore
-        id = process_session(one, session)
-        print(id)
-    # n_cores = os.cpu_count() - 4  # type: ignore
+    # Optional: Adjust max_workers based on your CPU cores/RAM
+    # (Default is number of processors on the machine)
+    with concurrent.futures.ProcessPoolExecutor(max_workers=n_cores) as executor:
 
+        # executor.map applies the function to every item in 'sessions'
+        # tqdm wraps the iterator to show the progress bar
+        results = list(
+            tqdm(
+                executor.map(process_null_distributions, sessions),  # type: ignore
+                total=len(sessions),  # type: ignore
+                desc="Processing Sessions",
+            )
+        )
 
-if __name__ == "__main__":
-    run_wfi()
+    # Summary
+    print(f"\nProcessing Complete.")
+    print(f"Successes: {results.count(1)}")
+    print(f"Failures: {results.count(-1)}")
