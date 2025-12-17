@@ -1,6 +1,7 @@
 min_units_decoding: 20
 min_behav_trials: 10
 n_bins_decoding: 3
+wifi_subset: 10
 subset: False
 null_computation: True
 discretize_decoding: 2
@@ -87,4 +88,3 @@ region_defaults: {
   ]}
 widefield_regions:  [ ["MOs"], ["SSp-ul"], ["VISam"], ["VISl"], ["VISp"], ["ACAd"], ["PL"], ["RSPv"], ["VISa"],
 ]
-wifi_subset: 15

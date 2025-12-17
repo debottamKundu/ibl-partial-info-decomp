@@ -180,6 +180,7 @@ def null_pairs_of_regions(eid, epoch):
         intervals, target_variable, congruent_flags, incongruent_flags = (
             get_new_cinc_intervals_choice(trials, epoch)
         )
+    print("Loading data")
 
     # remember there are pairs of regions now
     all_regions = config["widefield_regions"]

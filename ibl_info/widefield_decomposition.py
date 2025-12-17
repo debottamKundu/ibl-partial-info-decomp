@@ -16,7 +16,6 @@ from ibl_info.measures import information_measures as info
 import pickle as pkl
 from tqdm import tqdm
 import os
-from ibl_info.decoder_pid import linear_nonlinear_delta
 
 config = check_config()
 
