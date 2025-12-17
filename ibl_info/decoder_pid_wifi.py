@@ -24,6 +24,8 @@ from brainwidemap.bwm_loading import load_trials_and_mask
 import numpy as np
 import pickle as pkl
 import os
+from joblib import Parallel, delayed
+
 
 config = check_config()
 
@@ -40,6 +42,7 @@ def region_combinations(n_regions):
 def check_minimum(data_epoch, actual_regions):
     regions_to_keep = np.zeros(len(actual_regions))
     for idx in range(len(actual_regions)):
+        print(idx)
         if data_epoch[idx].shape[-1] > config["wifi_subset"]:
             regions_to_keep[idx] = 1
 
@@ -290,20 +293,10 @@ if __name__ == "__main__":
     n_cores = os.cpu_count() - 4  # type: ignore
 
     # Optional: Adjust max_workers based on your CPU cores/RAM
-    # (Default is number of processors on the machine)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=n_cores) as executor:
 
-        # executor.map applies the function to every item in 'sessions'
-        # tqdm wraps the iterator to show the progress bar
-        results = list(
-            tqdm(
-                executor.map(process_null_distributions, sessions),  # type: ignore
-                total=len(sessions),  # type: ignore
-                desc="Processing Sessions",
-            )
-        )
+    results = Parallel(n_jobs=4, verbose=10)(
+        delayed(process_null_distributions)(session) for session in sessions  # type: ignore
+    )
 
-    # Summary
-    print(f"\nProcessing Complete.")
-    print(f"Successes: {results.count(1)}")
-    print(f"Failures: {results.count(-1)}")
+    print(f"Successes: {results.count(1)}")  # type: ignore
+    print(f"Failures: {results.count(-1)}")  # type: ignore

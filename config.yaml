@@ -2,6 +2,7 @@ min_units_decoding: 20
 min_behav_trials: 10
 n_bins_decoding: 3
 subset: False
+null_computation: True
 discretize_decoding: 2
 epoch: "choice"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
