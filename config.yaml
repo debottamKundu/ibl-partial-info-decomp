@@ -3,6 +3,7 @@ min_behav_trials: 10
 n_bins_decoding: 3
 wifi_subset: 10
 subset: False
+flexible_bounds: True
 null_computation: True
 discretize_decoding: 2
 epoch: "choice"

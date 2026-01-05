@@ -11,14 +11,17 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def equispaced_binning(values, n_bins=5):
+def equispaced_binning(values, n_bins=5, flexible_bounds=False):
     """
     Bin values in [0,1] into equi-spaced bins.
 
     """
     values = np.asarray(values)
     # Create equispaced edges
-    edges = np.linspace(0, 1, n_bins + 1)
+    if flexible_bounds:
+        edges = np.linspace(np.min(values), np.max(values), n_bins + 1)
+    else:
+        edges = np.linspace(0, 1, n_bins + 1)
     # Digitize values into bins
     bin_indices = np.digitize(values, edges, right=False) - 1
     # Clip to [0, n_bins-1]
