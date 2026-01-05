@@ -268,9 +268,8 @@ def compute_decoder_pid(
     incongruent_mask=None,
     decoder_output_only=False,
 ):
-    print(n_bins)
+
     discretization_type = config["discretize_decoding"]
-    print(discretization_type)
     if len(spikes_b) == 0:
         results = run_decoder_bootstrapping(
             neural_data=spikes_a,

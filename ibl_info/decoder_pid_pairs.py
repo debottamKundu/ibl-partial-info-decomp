@@ -100,7 +100,7 @@ def run_pair_pid(session_id, region_a, region_b, epoch):
     spike_data_a = load_region(spikes, clusters, intervals, region_a)
     spike_data_b = load_region(spikes, clusters, intervals, region_b)
 
-    if spike_data_a == [] or spike_data_b == []:
+    if len(spike_data_a) == 0 or len(spike_data_b) == 0:
         return {}
 
     trial_count = np.zeros((3))
