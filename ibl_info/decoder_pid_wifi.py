@@ -249,7 +249,7 @@ def process_session(session_id):
     n_bins = config["n_bins_decoding"]
     discretizer = config["discretize_decoding"]
 
-    suffix = ""
+    suffix = f"{epoch}"
 
     if discretizer == 1:
         suffix += f"_equipopulated_{n_bins}"
@@ -289,7 +289,7 @@ if __name__ == "__main__":
     )
     sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
-    n_cores = os.cpu_count() - 4  # type: ignore
+    n_cores = 6  # type: ignore
 
     config["epoch"] = "stim"
 
