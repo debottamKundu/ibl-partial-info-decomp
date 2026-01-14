@@ -20,7 +20,7 @@ bias_correction: "qe"
 min_rt: 0.08
 max_rt: None
 hemisphere: ("left", "right")
-frames: [-2,0]
+frames: [-1,1]
 freeze: None
 model_locations: "/usr/people/kundu/code/ibl-partial-info-decomp/data/models" 
 # model_locations: "/Users/dkundu/Documents/phd/ibl-partial-info-decomp/models/results_behavioral"

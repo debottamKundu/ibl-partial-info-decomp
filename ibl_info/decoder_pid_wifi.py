@@ -67,15 +67,15 @@ def check_minimum(data_epoch, actual_regions):
     return new_data_epoch, regions_used_acronyms
 
 
-def wifi_pairs_of_regions(one, eid, epoch):
+def wifi_pairs_of_regions(eid, epoch):
 
     align_event = epoch_events(epoch)  # should default to stimon
-    # one = ONE(
-    #     base_url="https://openalyx.internationalbrainlab.org",
-    #     password="international",
-    #     silent=True,
-    #     username="intbrainlab",
-    # )
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
 
     # probably this one doesnt work
     # use sessionloader
@@ -242,7 +242,7 @@ def process_null_distributions(session_id):
         return -1
 
 
-def process_session(one, session_id):
+def process_session(session_id):
 
     eid = session_id
     epoch = config["epoch"]
@@ -262,7 +262,7 @@ def process_session(one, session_id):
         suffix += "_decomposition"
 
     try:
-        region_pickle = wifi_pairs_of_regions(one, eid, epoch)
+        region_pickle = wifi_pairs_of_regions(eid, epoch)
 
         with open(f"./data/generated/{eid}_wfi_{suffix}.pkl", "wb") as f:
             pkl.dump(region_pickle, f)
@@ -303,6 +303,7 @@ if __name__ == "__main__":
     print(f"Failures: {results.count(-1)}")  # type: ignore
 
     config["epoch"] = "choice"
+    config["frames"] = [-2, 0]
 
     results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
 
