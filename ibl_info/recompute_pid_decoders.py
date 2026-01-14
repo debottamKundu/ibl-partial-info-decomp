@@ -31,6 +31,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
+from ibl_info.decoder_utils import return_congruent_incongruent_flags
 from ibl_info.selective_decomposition import filter_eids
 from sklearn.svm import SVC
 from tqdm import tqdm
@@ -183,7 +184,7 @@ def recompute(data, n_bins=3):
         results = animal["decoding_results"]
         n_bootstraps = len(results)
 
-        information_array = np.zeros((n_bootstraps, 2, 7))
+        information_array = np.zeros((n_bootstraps, 3, 7))
         for iteration in tqdm(range(n_bootstraps), desc="Bootstraps", leave=False):
             temp = {}
 
@@ -282,9 +283,9 @@ def recompute(data, n_bins=3):
 # save results
 if __name__ == "__main__":
 
-    #allsessions, goodsessions
-    #stim and choice
-    
+    # allsessions, goodsessions
+    # stim and choice
+
     location = "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
     files = glob(f"{location}/*.pkl")
 

@@ -289,11 +289,22 @@ if __name__ == "__main__":
     )
     sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
-
-    # we will parallelize this
     n_cores = os.cpu_count() - 4  # type: ignore
 
-    # Optional: Adjust max_workers based on your CPU cores/RAM
+    config["epoch"] = "stim"
+
+    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
+
+    results = Parallel(n_jobs=4, verbose=10)(
+        delayed(process_null_distributions)(session) for session in sessions  # type: ignore
+    )
+
+    print(f"Successes: {results.count(1)}")  # type: ignore
+    print(f"Failures: {results.count(-1)}")  # type: ignore
+
+    config["epoch"] = "choice"
+
+    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
 
     results = Parallel(n_jobs=4, verbose=10)(
         delayed(process_null_distributions)(session) for session in sessions  # type: ignore

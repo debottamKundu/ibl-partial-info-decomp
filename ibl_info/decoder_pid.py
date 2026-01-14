@@ -56,6 +56,34 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 
 
+def compute_four_group_weights(y, congruent_mask):
+
+    # Create the 4 groups
+    # y is assumed to be 0 or 1. If -1/1
+    # We combine y and mask to get unique group IDs: 0, 1, 2, 3
+
+    # 0: Left (0) & Incongruent (False)
+    # 1: Left (0) & Congruent (True)
+    # 2: Right (1) & Incongruent (False)
+    # 3: Right (1) & Congruent (True)
+
+    group_labels = y * 2 + congruent_mask.astype(int)
+
+    # Count occurrences of each group
+    unique_groups, counts = np.unique(group_labels, return_counts=True)
+    n_samples = len(y)
+    n_groups = len(unique_groups)
+
+    # Calculate weight for each group: N_total / (N_groups * N_group_i)
+    # This ensures each group contributes equally to the loss.
+    weights = np.zeros(n_samples)
+    for group, count in zip(unique_groups, counts):
+        weight = n_samples / (n_groups * count)
+        weights[group_labels == group] = weight
+
+    return weights
+
+
 def run_decoder_bootstrapping(
     neural_data,
     trial_labels,
@@ -161,6 +189,9 @@ def run_decoder_bootstrapping(
             X_train_B, X_test_B = X_subset_B[train_idx], X_subset_B[test_idx]
             y_train = y[train_idx]
 
+            if congruent_mask is not None:
+                mask_train = congruent_mask[train_idx]
+
             if scale:
                 scaler_A = StandardScaler()
                 X_train_A = scaler_A.fit_transform(X_train_A)
@@ -170,7 +201,8 @@ def run_decoder_bootstrapping(
                 X_train_B = scaler_B.fit_transform(X_train_B)
                 X_test_B = scaler_B.transform(X_test_B)
 
-            train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
+            # train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
+            train_weights = compute_four_group_weights(y_train, mask_train)
 
             # Train Decoders
             clf_A = LogisticRegression(solver="lbfgs", max_iter=1000)

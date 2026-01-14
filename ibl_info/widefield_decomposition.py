@@ -6,6 +6,7 @@ import pandas as pd
 from prior_localization.prepare_data import prepare_widefield
 from brainbox.io.one import SessionLoader
 from brainwidemap.bwm_loading import load_trials_and_mask
+from ibl_info.decoder_pid_wifi import region_combinations
 from ibl_info.prepare_data_pid import get_new_cinc_intervals
 import seaborn as sns
 from matplotlib import pyplot as plt

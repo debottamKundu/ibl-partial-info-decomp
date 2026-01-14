@@ -1,10 +1,10 @@
-min_units_decoding: 20
+min_units_decoding: 10
 min_behav_trials: 10
 n_bins_decoding: 3
 wifi_subset: 10
 subset: False
 flexible_bounds: True
-null_computation: True
+null_computation: False
 discretize_decoding: 2
 epoch: "choice"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
