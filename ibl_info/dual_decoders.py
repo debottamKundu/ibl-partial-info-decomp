@@ -5,11 +5,38 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import compute_sample_weight
 from tqdm import tqdm
-from ibl_info.decoder_pid import compute_four_group_weights
 from ibl_info.utils import check_config
 import numpy as np
 
 config = check_config()
+
+
+def compute_four_group_weights(y, congruent_mask):
+
+    # Create the 4 groups
+    # y is assumed to be 0 or 1. If -1/1
+    # We combine y and mask to get unique group IDs: 0, 1, 2, 3
+
+    # 0: Left (0) & Incongruent (False)
+    # 1: Left (0) & Congruent (True)
+    # 2: Right (1) & Incongruent (False)
+    # 3: Right (1) & Congruent (True)
+
+    group_labels = y * 2 + congruent_mask.astype(int)
+
+    # Count occurrences of each group
+    unique_groups, counts = np.unique(group_labels, return_counts=True)
+    n_samples = len(y)
+    n_groups = len(unique_groups)
+
+    # Calculate weight for each group: N_total / (N_groups * N_group_i)
+    # This ensures each group contributes equally to the loss.
+    weights = np.zeros(n_samples)
+    for group, count in zip(unique_groups, counts):
+        weight = n_samples / (n_groups * count)
+        weights[group_labels == group] = weight
+
+    return weights
 
 
 def run_dual_region_decoder_bootstrapping(
