@@ -327,7 +327,7 @@ def compute_decoder_pid(
             n_splits=5,
             congruent_mask=congruent_mask,
             incongruent_mask=incongruent_mask,
-            scale=True,
+            scale=False,
         )
 
     if decoder_output_only:

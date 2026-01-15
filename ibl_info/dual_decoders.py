@@ -336,7 +336,10 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
     # 1. Validation and Setup
     if param_grid is None:
         # Default optimization grid for Logistic Regression regularization
-        param_grid = {"clf__C": [0.001, 0.01, 0.1, 1, 10, 100]}
+        param_grid = {
+            "clf__C": [0.001, 0.01, 0.1, 1, 10, 100],
+            "scaler": [StandardScaler(), "passthrough"],
+        }
 
     X_A = neural_data_A
     X_B = neural_data_B
@@ -413,12 +416,26 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
             steps_A = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
             steps_B = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
 
-            if scale:
-                steps_A.insert(0, ("scaler", StandardScaler()))
-                steps_B.insert(0, ("scaler", StandardScaler()))
+            # if scale:
+            #     steps_A.insert(0, ("scaler", StandardScaler()))  # type: ignore
+            #     steps_B.insert(0, ("scaler", StandardScaler()))  # type: ignore
 
-            pipeline_A = Pipeline(steps_A)
-            pipeline_B = Pipeline(steps_B)
+            # pipeline_A = Pipeline(steps_A)
+            # pipeline_B = Pipeline(steps_B)
+
+            pipeline_A = Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    ("clf", LogisticRegression(solver="liblinear", max_iter=1000)),
+                ]
+            )
+
+            pipeline_B = Pipeline(
+                [
+                    ("scaler", StandardScaler()),
+                    ("clf", LogisticRegression(solver="liblinear", max_iter=1000)),
+                ]
+            )
 
             # --- Inner CV (Grid Search) ---
             # Optimize Region A

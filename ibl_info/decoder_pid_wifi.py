@@ -42,7 +42,7 @@ def region_combinations(n_regions):
 def check_minimum(data_epoch, actual_regions):
     regions_to_keep = np.zeros(len(actual_regions))
     for idx in range(len(actual_regions)):
-        print(idx)
+        # print(idx)
         if data_epoch[idx].shape[-1] > config["wifi_subset"]:
             regions_to_keep[idx] = 1
 

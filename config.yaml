@@ -1,7 +1,7 @@
 min_units_decoding: 10
 min_behav_trials: 10
 n_bins_decoding: 3
-wifi_subset: 30
+wifi_subset: 15
 subset: False
 flexible_bounds: False
 null_computation: False
