@@ -26,7 +26,10 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import GridSearchCV, KFold, LeaveOneOut, train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
-from ibl_info.dual_decoders import run_dual_region_decoder_bootstrapping
+from ibl_info.dual_decoders import (
+    run_dual_region_decoder_bootstrapping,
+    run_dual_region_decoder_bootstrapping_hyperparamopt,
+)
 from ibl_info.selective_decomposition import filter_eids
 from sklearn.svm import SVC
 from tqdm import tqdm
@@ -315,7 +318,7 @@ def compute_decoder_pid(
             incongruent_mask=incongruent_mask,
         )
     else:
-        results = run_dual_region_decoder_bootstrapping(
+        results = run_dual_region_decoder_bootstrapping_hyperparamopt(
             spikes_a,
             spikes_b,
             target,
@@ -418,7 +421,7 @@ def compute_decoder_pid(
 # add decoder cv with grid search
 
 
-def run_decoder_bootstrapping_CV(
+def run_decoder_bootstrapping_hyperparam(
     neural_data,
     trial_labels,
     subset_size_D,

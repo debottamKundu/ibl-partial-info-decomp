@@ -302,14 +302,14 @@ if __name__ == "__main__":
     # print(f"Successes: {results.count(1)}")  # type: ignore
     # print(f"Failures: {results.count(-1)}")  # type: ignore
 
-    config["epoch"] = "choice"
-    config["frames"] = [-2, 0]
+    # config["epoch"] = "choice"
+    # config["frames"] = [-2, 0]
 
-    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
+    # results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
 
-    # results = Parallel(n_jobs=4, verbose=10)(
-    #     delayed(process_null_distributions)(session) for session in sessions  # type: ignore
-    # )
+    # # results = Parallel(n_jobs=4, verbose=10)(
+    # #     delayed(process_null_distributions)(session) for session in sessions  # type: ignore
+    # # )
 
-    print(f"Successes: {results.count(1)}")  # type: ignore
-    print(f"Failures: {results.count(-1)}")  # type: ignore
+    # print(f"Successes: {results.count(1)}")  # type: ignore
+    # print(f"Failures: {results.count(-1)}")  # type: ignore
