@@ -274,7 +274,7 @@ def process_session(session_id):
 
 def run_wfi():
     for session in tqdm(sessions, desc="sessions"):  # type: ignore
-        id = process_session(one, session)
+        id = process_session(session)
         print(id)
     # n_cores = os.cpu_count() - 4  # type: ignore
 
@@ -289,27 +289,27 @@ if __name__ == "__main__":
     )
     sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
-    n_cores = 6  # type: ignore
+    n_cores = 8  # type: ignore
 
     config["epoch"] = "stim"
 
     results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
 
-    results = Parallel(n_jobs=4, verbose=10)(
-        delayed(process_null_distributions)(session) for session in sessions  # type: ignore
-    )
+    # results = Parallel(n_jobs=4, verbose=10)(
+    #     delayed(process_null_distributions)(session) for session in sessions  # type: ignore
+    # )
 
-    print(f"Successes: {results.count(1)}")  # type: ignore
-    print(f"Failures: {results.count(-1)}")  # type: ignore
+    # print(f"Successes: {results.count(1)}")  # type: ignore
+    # print(f"Failures: {results.count(-1)}")  # type: ignore
 
     config["epoch"] = "choice"
     config["frames"] = [-2, 0]
 
     results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
 
-    results = Parallel(n_jobs=4, verbose=10)(
-        delayed(process_null_distributions)(session) for session in sessions  # type: ignore
-    )
+    # results = Parallel(n_jobs=4, verbose=10)(
+    #     delayed(process_null_distributions)(session) for session in sessions  # type: ignore
+    # )
 
     print(f"Successes: {results.count(1)}")  # type: ignore
     print(f"Failures: {results.count(-1)}")  # type: ignore

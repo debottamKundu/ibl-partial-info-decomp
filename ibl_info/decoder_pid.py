@@ -201,8 +201,10 @@ def run_decoder_bootstrapping(
                 X_train_B = scaler_B.fit_transform(X_train_B)
                 X_test_B = scaler_B.transform(X_test_B)
 
-            # train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
-            train_weights = compute_four_group_weights(y_train, mask_train)
+            if congruent_mask is None:
+                train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
+            else:
+                train_weights = compute_four_group_weights(y_train, mask_train)
 
             # Train Decoders
             clf_A = LogisticRegression(solver="lbfgs", max_iter=1000)
@@ -411,6 +413,167 @@ def compute_decoder_pid(
         )
 
     return information_array, results
+
+
+# add decoder cv with grid search
+
+
+def run_decoder_bootstrapping_CV(
+    neural_data,
+    trial_labels,
+    subset_size_D,
+    n_bootstraps=50,
+    n_splits=5,
+    congruent_mask=None,
+    incongruent_mask=None,
+    scale=False,
+    param_grid=None,
+):
+    """
+    Bootstraps linear decoders with Nested Cross-Validation.
+
+    Matches the logic of decode_cv from fit_data.py:
+    1. Outer Loop: Splits data into Train/Test.
+    2. Inner Loop: Optimizes hyperparameters (C) on Train data.
+    3. Refit: Trains best model on full Train data.
+    4. Predict: Evaluates on Test data.
+    """
+
+    # 1. Setup Defaults matching fit_data.py logic
+    if param_grid is None:
+        # Default grid usually covers a wide range of regularization strengths
+        param_grid = {"clf__C": [0.01, 0.1, 1]}
+
+    X = neural_data
+    y = trial_labels.flatten()
+    n_trials, n_neurons = X.shape
+
+    # Handle masks for subset metrics
+    cong_indices = None
+    incong_indices = None
+    if congruent_mask is not None:
+        congruent_mask = np.array(congruent_mask).flatten().astype(bool)
+        cong_indices = np.where(congruent_mask)[0]
+    if incongruent_mask is not None:
+        incongruent_mask = np.array(incongruent_mask).flatten().astype(bool)
+        incong_indices = np.where(incongruent_mask)[0]
+
+    if 2 * subset_size_D > n_neurons:
+        raise ValueError(f"Cannot select 2 sets of {subset_size_D} from {n_neurons} neurons.")
+
+    results = []
+    print(f"Starting Nested CV Bootstrapping ({n_bootstraps} runs)...")
+
+    for i in range(n_bootstraps):
+        # 2. Sub-sample neurons (Bootstrapping)
+        permuted_indices = np.random.permutation(n_neurons)
+        idx_A = permuted_indices[:subset_size_D]
+        idx_B = permuted_indices[subset_size_D : 2 * subset_size_D]
+
+        X_subset_A = X[:, idx_A]
+        X_subset_B = X[:, idx_B]
+
+        # Containers for predictions
+        n_classes = len(np.unique(y))
+        probs_A_all = np.zeros((n_trials, n_classes))
+        probs_B_all = np.zeros((n_trials, n_classes))
+
+        # Track parameters selected by the inner loops
+        best_params_A = []
+        best_params_B = []
+
+        # 3. Outer Cross-Validation Loop (Evaluation)
+        # We use StratifiedKFold to ensure class balance in folds, similar to
+        # the 'logisticreg_criteria' checks in fit_data.py
+        outer_cv = StratifiedKFold(n_splits=n_splits, shuffle=True)
+
+        for train_idx, test_idx in outer_cv.split(X, y):
+            # A. Split Data
+            y_train = y[train_idx]
+
+            X_train_A, X_test_A = X_subset_A[train_idx], X_subset_A[test_idx]
+            X_train_B, X_test_B = X_subset_B[train_idx], X_subset_B[test_idx]
+
+            # B. Compute Sample Weights
+            # decode_cv uses "balanced" weighting by default for classification
+            train_weights = compute_sample_weight("balanced", y=y_train)
+
+            # C. Define Pipeline
+            # If scaling is on, we put it in a pipeline so it runs *inside* the CV
+            # This prevents data leakage (calculating mean/std on test data).
+            steps_A = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
+            steps_B = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
+
+            if scale:
+                steps_A.insert(0, ("scaler", StandardScaler()))  # type: ignore
+                steps_B.insert(0, ("scaler", StandardScaler()))  # type: ignore
+
+            pipeline_A = Pipeline(steps_A)
+            pipeline_B = Pipeline(steps_B)
+
+            # D. Inner Cross-Validation Loop (Optimization)
+            # GridSearchCV performs the inner split, fit, and score loop.
+            # We use 'balanced_accuracy' as the scoring metric to match decode_cv.
+            grid_A = GridSearchCV(
+                pipeline_A, param_grid, cv=5, scoring="balanced_accuracy", n_jobs=-1
+            )
+            grid_B = GridSearchCV(
+                pipeline_B, param_grid, cv=5, scoring="balanced_accuracy", n_jobs=-1
+            )
+
+            # Fit the Grid Search (This runs the Inner Loop)
+            # Note: We pass sample_weight via the **fit_params specific to the 'clf' step
+            grid_A.fit(X_train_A, y_train, clf__sample_weight=train_weights)
+            grid_B.fit(X_train_B, y_train, clf__sample_weight=train_weights)
+
+            # E. Store Best Params
+            best_params_A.append(grid_A.best_params_["clf__C"])
+            best_params_B.append(grid_B.best_params_["clf__C"])
+
+            # F. Predict on Test Data (Outer Loop)
+            # grid.predict_proba automatically uses the best refitted model
+            probs_A_all[test_idx] = grid_A.predict_proba(X_test_A)
+            probs_B_all[test_idx] = grid_B.predict_proba(X_test_B)
+
+        # 4. Calculate Final Metrics (Same as before)
+        preds_A = np.argmax(probs_A_all, axis=1)
+        preds_B = np.argmax(probs_B_all, axis=1)
+
+        metrics = {
+            "accuracy_A": accuracy_score(y, preds_A),
+            "accuracy_B": accuracy_score(y, preds_B),
+            "balanced_acc_A": balanced_accuracy_score(y, preds_A),
+            "balanced_acc_B": balanced_accuracy_score(y, preds_B),
+        }
+
+        # Helper for subset metrics
+        def get_subset_metrics(indices, prefix):
+            if indices is None:
+                return {}
+            return {
+                f"accuracy_A_{prefix}": accuracy_score(y[indices], preds_A[indices]),
+                f"balanced_acc_A_{prefix}": balanced_accuracy_score(y[indices], preds_A[indices]),
+                f"accuracy_B_{prefix}": accuracy_score(y[indices], preds_B[indices]),
+                f"balanced_acc_B_{prefix}": balanced_accuracy_score(y[indices], preds_B[indices]),
+            }
+
+        metrics.update(get_subset_metrics(cong_indices, "cong"))
+        metrics.update(get_subset_metrics(incong_indices, "incong"))
+
+        # 5. Save Results
+        run_data = {
+            "iteration": i,
+            "probs_A": probs_A_all,
+            "probs_B": probs_B_all,
+            "best_params_A": best_params_A,
+            "best_params_B": best_params_B,
+            "neurons_A": idx_A,
+            "neurons_B": idx_B,
+        }
+        run_data.update(metrics)
+        results.append(run_data)
+
+    return results
 
 
 def run_decoder_single_session(session_id, epoch, region):

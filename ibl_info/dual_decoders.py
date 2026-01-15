@@ -5,6 +5,7 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import compute_sample_weight
 from tqdm import tqdm
+from ibl_info.decoder_pid import compute_four_group_weights
 from ibl_info.utils import check_config
 import numpy as np
 
@@ -113,6 +114,9 @@ def run_dual_region_decoder_bootstrapping(
             X_train_B, X_test_B = X_subset_B[train_idx], X_subset_B[test_idx]
             y_train = y[train_idx]
 
+            if congruent_mask is not None:
+                mask_train = congruent_mask[train_idx]
+
             # Scaling
             if scale:
                 scaler_A = StandardScaler()
@@ -122,6 +126,11 @@ def run_dual_region_decoder_bootstrapping(
                 scaler_B = StandardScaler()
                 X_train_B = scaler_B.fit_transform(X_train_B)
                 X_test_B = scaler_B.transform(X_test_B)
+
+            if congruent_mask is None:
+                train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
+            else:
+                train_weights = compute_four_group_weights(y_train, mask_train)
 
             train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
 
