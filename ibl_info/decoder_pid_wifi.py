@@ -88,6 +88,16 @@ def wifi_pairs_of_regions(eid, epoch):
         exclude_unbiased=True,
     )
     trials = trials[mask]
+
+    # if only high contrast, we subset here
+    # sanity check
+    if config["high_contrast"]:
+        trials.loc[:, "contrast"] = trials["contrastRight"].fillna(0) + trials[
+            "contrastLeft"
+        ].fillna(0)
+        high_contrast_mask = trials["contrast"] >= 0.125
+        trials = trials[high_contrast_mask]
+
     align_times = trials[align_event].values
 
     if epoch == "stim":
@@ -258,6 +268,8 @@ def process_session(session_id):
 
     if config["null_computation"] == True:
         suffix += "_null"
+    elif config["decoder_output_only"] == True:
+        suffix += "_decoder_output"
     else:
         suffix += "_decomposition"
 
@@ -289,7 +301,7 @@ if __name__ == "__main__":
     )
     sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(sessions)} sessions with widefield data found")  # type: ignore
-    n_cores = 8  # type: ignore
+    n_cores = 6  # type: ignore
 
     config["epoch"] = "stim"
 

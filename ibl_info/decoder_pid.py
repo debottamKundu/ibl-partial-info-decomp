@@ -318,20 +318,33 @@ def compute_decoder_pid(
             incongruent_mask=incongruent_mask,
         )
     else:
-        results = run_dual_region_decoder_bootstrapping_hyperparamopt(
-            spikes_a,
-            spikes_b,
-            target,
-            subset_size_D=config["wifi_subset"],
-            n_bootstraps=config["n_bootstraps_decoding"],
-            n_splits=5,
-            congruent_mask=congruent_mask,
-            incongruent_mask=incongruent_mask,
-            scale=False,
-        )
+        if config["hyperparamopt"]:
+            results = run_dual_region_decoder_bootstrapping_hyperparamopt(
+                spikes_a,
+                spikes_b,
+                target,
+                subset_size_D=config["wifi_subset"],
+                n_bootstraps=config["n_bootstraps_decoding"],
+                n_splits=5,
+                congruent_mask=congruent_mask,
+                incongruent_mask=incongruent_mask,
+                scale=False,
+            )
+        else:
+            results = run_dual_region_decoder_bootstrapping(
+                spikes_a,
+                spikes_b,
+                target,
+                subset_size_D=config["wifi_subset"],
+                n_bootstraps=config["n_bootstraps_decoding"],
+                n_splits=5,
+                congruent_mask=congruent_mask,
+                incongruent_mask=incongruent_mask,
+                scale=False,
+            )
 
     if decoder_output_only:
-        return results, []
+        return [], results
 
     # skip the all trials
     information_array = np.zeros((n_bootstraps, 3, 7))

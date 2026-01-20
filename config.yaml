@@ -2,11 +2,13 @@ min_units_decoding: 10
 min_behav_trials: 10
 n_bins_decoding: 3
 wifi_subset: 15
+high_contrast: True
+hyperparamopt: False
 subset: False
 flexible_bounds: False
 null_computation: False
 discretize_decoding: 2
-epoch: "choice"
+epoch: "stim"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
 decoder_output_only: True
 n_bootstraps_decoding : 10
