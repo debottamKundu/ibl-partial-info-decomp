@@ -70,6 +70,16 @@ config = check_config()
 # code to load pickles and redo decoding and save.
 
 
+def load_specific_regions(eid):
+
+    # we can change out the frame if we want
+    location = "/usr/people/kundu/code/ibl-partial-info-decomp//data/processed/wfi_stim_frames/wifi_stim_good_regions_per_sessions_frame2.pkl"
+
+    with open(location, "rb") as f:
+        data = pkl.load(f)
+
+    return data[eid]
+
 
 def return_congruent_incongruent_flags(one, animal_id, epoch):
 
@@ -88,6 +98,7 @@ def return_congruent_incongruent_flags(one, animal_id, epoch):
         )
 
     return congruent_flags.values, incongruent_flags.values
+
 
 def collapse_animal(animal):
     # the 7 is mia, mib, tvmi, unqa, unqb, red, syn
@@ -527,4 +538,3 @@ def compute_deltas_all(files_choice, files_stim):
         # np.asarray(synergy),
         region_names,
     )
-

@@ -14,6 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.utils import compute_sample_weight
 from tqdm import tqdm
 from ibl_info.decoder_pid import compute_decoder_pid
+from ibl_info.decoder_utils import load_specific_regions
 from ibl_info.dual_decoders import compute_null_distribution
 from ibl_info.prepare_data_pid import get_new_cinc_intervals, get_new_cinc_intervals_choice
 from ibl_info.utils import check_config, epoch_events
@@ -110,7 +111,14 @@ def wifi_pairs_of_regions(eid, epoch):
         )
 
     # remember there are pairs of regions now
-    all_regions = config["widefield_regions"]
+
+    # load only significant decoders
+    if config["decoder_over_null_filter"]:
+        temp_regions = load_specific_regions(eid)
+        # this is because the function needs the data in a particular way
+        all_regions = [[r] for r in temp_regions]
+    else:
+        all_regions = config["widefield_regions"]
 
     data_epoch, actual_regions = prepare_widefield(
         one,
@@ -268,10 +276,13 @@ def process_session(session_id):
 
     if config["null_computation"] == True:
         suffix += "_null"
-    elif config["decoder_output_only"] == True:
+    if config["decoder_output_only"] == True:
         suffix += "_decoder_output"
     else:
         suffix += "_decomposition"
+
+    if config["decoder_over_null_filter"]:
+        suffix += "_significant_regions_only"
 
     try:
         region_pickle = wifi_pairs_of_regions(eid, epoch)

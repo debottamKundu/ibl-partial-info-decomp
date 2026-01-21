@@ -146,7 +146,7 @@ def compute_subsampled(congruent_spikes, congruent_targets, incongruent_targets)
     sampled_mi = []
     sampled_pid = []
     sampled_joint = []
-    for repeats in range(3):  # should be 5 or more, lower in order to speed up
+    for repeats in range(5):  # should be 5 or more, lower in order to speed up
 
         n_left_subsample = int(np.round(left_fraction * len(incongruent_targets)))
         n_right_subsample = int(len(incongruent_targets) - n_left_subsample)

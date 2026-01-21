@@ -1,32 +1,41 @@
-min_units_decoding: 10
-min_behav_trials: 10
-n_bins_decoding: 3
+# wifi-decoding only
 wifi_subset: 15
-high_contrast: True
-hyperparamopt: False
-subset: False
-flexible_bounds: False
+high_contrast: False
+hyperparamopt: True
 null_computation: False
+decoder_over_null_filter: True
+decoder_output_only: True
+min_units_decoding: 10
+n_bins_decoding: 3
+flexible_bounds: False
+# general parameters
+n_bootstraps_decoding : 10
 discretize_decoding: 2
 epoch: "stim"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
-decoder_output_only: True
-n_bootstraps_decoding : 10
+# single cell parameters
 n_bins: 3
+subset: False
 single_cell_filter: True
 mi_filter: True
 decoder_filter: True
 discretize: 1
+# bias corrections
 repeats_for_bias_correction: 5
 bias_correction: "qe"
+# behavioral constraints
 min_rt: 0.08
 max_rt: None
+min_behav_trials: 10
+# wifi data
+frames: [0,1]
 hemisphere: ("left", "right")
-frames: [-1,1]
 freeze: None
+# prior models
 model_locations: "/usr/people/kundu/code/ibl-partial-info-decomp/data/models" 
 # model_locations: "/Users/dkundu/Documents/phd/ibl-partial-info-decomp/models/results_behavioral"
 pq_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/external/stimside_stage2.pqt"
+# region defaults, wifi and ephys
 stim_prior_regions : [
         "VISp",
         "MOs",

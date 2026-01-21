@@ -326,7 +326,7 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
     congruent_mask=None,
     incongruent_mask=None,
     scale=True,
-    param_grid=None,  # <--- NEW: Param grid for optimization
+    param_grid=None,
 ):
     """
     Bootstraps linear decoders on subsets of neurons from two regions (A and B)
@@ -337,7 +337,7 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
     if param_grid is None:
         # Default optimization grid for Logistic Regression regularization
         param_grid = {
-            "clf__C": [0.001, 0.01, 0.1, 1, 10, 100],
+            "clf__C": [0.01, 0.1, 1, 10, 100],
             "scaler": [StandardScaler(), "passthrough"],
         }
 
@@ -403,16 +403,13 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
             if congruent_mask is None:
                 train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
             else:
-                # Assuming 'compute_four_group_weights' is available in your scope
-                # If not, fallback to standard balanced weights
+
                 mask_train = congruent_mask[train_idx]
                 try:
                     train_weights = compute_four_group_weights(y_train, mask_train)
                 except NameError:
                     train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
 
-            # --- Define Pipelines ---
-            # We put the estimator in a pipeline step named 'clf' to target it in param_grid
             steps_A = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
             steps_B = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
 
