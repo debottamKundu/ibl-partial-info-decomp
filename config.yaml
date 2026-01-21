@@ -1,7 +1,7 @@
 # wifi-decoding only
 wifi_subset: 15
 high_contrast: False
-hyperparamopt: True
+hyperparamopt: False
 null_computation: False
 decoder_over_null_filter: True
 decoder_output_only: True
