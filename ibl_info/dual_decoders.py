@@ -337,7 +337,7 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
     if param_grid is None:
         # Default optimization grid for Logistic Regression regularization
         param_grid = {
-            "clf__C": [0.01, 0.1, 1, 10, 100],
+            "clf__C": [1e-3, 0.01, 0.1, 1, 10, 100],
             "scaler": [StandardScaler(), "passthrough"],
         }
 
@@ -500,6 +500,8 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
             "y_true": y,
             "neurons_A_indices": idx_A,
             "neurons_B_indices": idx_B,
+            "y_cong": y[cong_indices] if cong_indices is not None else None,
+            "y_incong": y[incong_indices] if incong_indices is not None else None,
         }
         run_data.update(metrics_sub)
         results.append(run_data)

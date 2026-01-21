@@ -434,6 +434,7 @@ def compute_decoder_pid(
 # add decoder cv with grid search
 
 
+# this is for a single region, the functions look too similar, confusing :(
 def run_decoder_bootstrapping_hyperparam(
     neural_data,
     trial_labels,
@@ -720,6 +721,7 @@ def run_decoder_decomposition_only(results):
         target_incon = results[iteration]["y_incong"]
 
         discretization_type = config["discretize_decoding"]
+        flexible_bounds = config["flexible_bounds"]
 
         if discretization_type == 1:
 
@@ -745,23 +747,41 @@ def run_decoder_decomposition_only(results):
 
         elif discretization_type == 2:
             X1_con = np.asarray(
-                equispaced_binning(output_a_con[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_a_con[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
             X2_con = np.asarray(
-                equispaced_binning(output_b_con[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_b_con[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
             X1_incon = np.asarray(
-                equispaced_binning(output_a_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_a_incon[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
             X2_incon = np.asarray(
-                equispaced_binning(output_b_incon[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_b_incon[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
 
             X1_all = np.asarray(
-                equispaced_binning(output_a_all[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_a_all[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
             X2_all = np.asarray(
-                equispaced_binning(output_b_all[:, 0], n_bins=n_bins), dtype=np.int32
+                equispaced_binning(
+                    output_b_all[:, 0], n_bins=n_bins, flexible_bounds=flexible_bounds
+                ),
+                dtype=np.int32,
             )
         else:
             raise NotImplementedError

@@ -4,12 +4,12 @@ high_contrast: False
 hyperparamopt: True
 null_computation: False
 decoder_over_null_filter: True
-decoder_output_only: True
+decoder_output_only: False
 min_units_decoding: 10
 n_bins_decoding: 3
 flexible_bounds: False
 # general parameters
-n_bootstraps_decoding : 10
+n_bootstraps_decoding : 20
 discretize_decoding: 2
 epoch: "stim"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
