@@ -328,7 +328,7 @@ def compute_decoder_pid(
                 n_splits=5,
                 congruent_mask=congruent_mask,
                 incongruent_mask=incongruent_mask,
-                scale=False,
+                scale=True,
             )
         else:
             results = run_dual_region_decoder_bootstrapping(
@@ -340,7 +340,7 @@ def compute_decoder_pid(
                 n_splits=5,
                 congruent_mask=congruent_mask,
                 incongruent_mask=incongruent_mask,
-                scale=False,
+                scale=True,
             )
 
     if decoder_output_only:
