@@ -115,6 +115,8 @@ def wifi_pairs_of_regions(eid, epoch):
     # load only significant decoders
     if config["decoder_over_null_filter"]:
         temp_regions = load_specific_regions(eid)
+        if temp_regions == []:
+            return {}
         # this is because the function needs the data in a particular way
         all_regions = [[r] for r in temp_regions]
     else:

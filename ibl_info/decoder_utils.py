@@ -78,7 +78,12 @@ def load_specific_regions(eid):
     with open(location, "rb") as f:
         data = pkl.load(f)
 
-    return data[eid]
+    eid = str(eid)
+
+    if eid not in data.keys():
+        return []
+    else:
+        return data[eid]
 
 
 def return_congruent_incongruent_flags(one, animal_id, epoch):
