@@ -136,7 +136,6 @@ def run_dual_region_decoder_bootstrapping(
         # Note: We split based on y, indices align for both A and B since trials are paired
         for train_idx, test_idx in skf.split(np.zeros(n_trials_A), y):
 
-            # Slice Data
             X_train_A, X_test_A = X_subset_A[train_idx], X_subset_A[test_idx]
             X_train_B, X_test_B = X_subset_B[train_idx], X_subset_B[test_idx]
             y_train = y[train_idx]
@@ -144,7 +143,6 @@ def run_dual_region_decoder_bootstrapping(
             if congruent_mask is not None:
                 mask_train = congruent_mask[train_idx]
 
-            # Scaling
             if scale:
                 scaler_A = StandardScaler()
                 X_train_A = scaler_A.fit_transform(X_train_A)
@@ -159,20 +157,15 @@ def run_dual_region_decoder_bootstrapping(
             else:
                 train_weights = compute_four_group_weights(y_train, mask_train)
 
-            train_weights = compute_sample_weight(class_weight="balanced", y=y_train)
-
-            # Train Decoders
             clf_A = LogisticRegression(solver="lbfgs", max_iter=1000)
             clf_B = LogisticRegression(solver="lbfgs", max_iter=1000)
 
             clf_A.fit(X_train_A, y_train, sample_weight=train_weights)
             clf_B.fit(X_train_B, y_train, sample_weight=train_weights)
 
-            # Predict
             probs_A_all[test_idx] = clf_A.predict_proba(X_test_A)
             probs_B_all[test_idx] = clf_B.predict_proba(X_test_B)
 
-        # 4. Calculate Metrics
         preds_A = np.argmax(probs_A_all, axis=1)
         preds_B = np.argmax(probs_B_all, axis=1)
 
@@ -183,7 +176,6 @@ def run_dual_region_decoder_bootstrapping(
 
         metrics_sub = {}
 
-        # Helper for subsets (Congruent/Incongruent)
         def get_subset_metrics(indices, y_full, preds_A_full, preds_B_full, prefix):
             if indices is None or len(indices) == 0:
                 return {}

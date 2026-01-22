@@ -178,7 +178,7 @@ def process_single_animal(file):
     eid = file.rsplit("/")[-1].rsplit("_wfi")[0]
     region_data = {}
 
-    epoch = "choice"
+    epoch = "stim"
     suffix = f"{epoch}"
     n_bins = config["n_bins_decoding"]
     discretizer = config["discretize_decoding"]
@@ -191,8 +191,8 @@ def process_single_animal(file):
     suffix += "_decomposition"
 
     try:
-        for k in data[2].keys():
-            results = data[2][k]["results"]
+        for k in data[1].keys():
+            results = data[1][k]["results"]
             information_array = run_decoder_decomposition_only(results)
             region_data[k] = information_array
 
@@ -204,11 +204,122 @@ def process_single_animal(file):
         return -1
 
 
+# utils for aggregation
+
+
+def region_tvmi(region_data):
+
+    region_tvmi = np.nanmean(region_data[:, :, 2], axis=0)
+    return region_tvmi
+
+
+def collapse_region_recomputed(region_data):
+    # the 7 is mia, mib, tvmi, unqa, unqb, red, syn
+
+    rsi_congruent = np.nanmean(
+        region_data[:, 0, 2] - (region_data[:, 0, 0] + region_data[:, 0, 1]),
+        axis=0,
+    )
+
+    rsi_incongruent = np.nanmean(
+        region_data[:, 1, 2] - (region_data[:, 1, 0] + region_data[:, 1, 1]),
+        axis=0,
+    )
+
+    rsi_all = np.nanmean(
+        region_data[:, 2, 2] - (region_data[:, 2, 0] + region_data[:, 2, 1]),
+        axis=0,
+    )
+
+    rsi_subsampled = np.nanmean(
+        region_data[:, 3, 2] - (region_data[:, 3, 0] + region_data[:, 3, 1]),
+        axis=0,
+    )
+
+    return rsi_congruent, rsi_incongruent, rsi_all, rsi_subsampled
+
+
+def pids_per_animal_recomputed(animal):
+    rsi_congruent_array = []
+    rsi_incongruent_array = []
+    rsi_all_array = []
+    rsi_subsampled_array = []
+    tvmi_array = []
+
+    for region_name in animal.keys():
+        rsi_congruent, rsi_incongruent, rsi_all, rsi_subsampled = collapse_region_recomputed(
+            animal[region_name],
+        )
+        rsi_congruent_array.append(rsi_congruent)
+        rsi_incongruent_array.append(rsi_incongruent)
+        rsi_all_array.append(rsi_all)
+        rsi_subsampled_array.append(rsi_subsampled)
+        tvmi_array.append(region_tvmi(animal[region_name]))
+
+    return (
+        np.asarray(rsi_congruent_array),
+        np.asarray(rsi_incongruent_array),
+        np.asarray(rsi_all_array),
+        np.asarray(rsi_subsampled_array),
+        np.asarray(tvmi_array),
+    )
+
+
+def congregate_data_recomputed(files, frame_idx=None):
+
+    rsi_congruent = []
+    rsi_incongruent = []
+    rsi_all = []
+    rsi_subsampled = []
+    tvmi_array = []
+
+    for filename in files:
+        with open(filename, "rb") as f:
+            animal = pkl.load(f)
+
+        if animal == {}:
+            continue
+
+        # now for one animal
+        (
+            rsi_congruent_values,
+            rsi_incongruent_values,
+            rsi_all_values,
+            rsi_subsampled_values,
+            tvmi_values,
+        ) = pids_per_animal_recomputed(animal)
+
+        # now what?
+        # append for all animals
+
+        rsi_congruent.append(rsi_congruent_values)
+        rsi_incongruent.append(rsi_incongruent_values)
+        rsi_all.append(rsi_all_values)
+        rsi_subsampled.append(rsi_subsampled_values)
+        tvmi_array.append(tvmi_values)
+
+    return (
+        np.asarray(rsi_congruent),
+        np.asarray(rsi_incongruent),
+        np.asarray(rsi_all),
+        np.asarray(rsi_subsampled),
+        np.asarray(tvmi_array),
+    )
+
+
 if __name__ == "__main__":
-    files_choice = np.sort(glob("../data/generated/wfi_decoders/choice/equi_3/*.pkl"))
+    files_stim = np.sort(
+        glob(
+            "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/significant_wfi_decoders/with_decomposition/*.pkl"
+        )
+    )
 
     results = Parallel(n_jobs=8)(
-        delayed(process_single_animal)(file=f) for f in tqdm(files_choice, desc="Processing")
+        delayed(process_single_animal)(file=f) for f in tqdm(files_stim, desc="Processing")
     )
     print(f"Successes: {results.count(1)}")  # type: ignore
     print(f"Failures: {results.count(-1)}")  # type: ignore
+
+
+# /usr/people/kundu/code/ibl-partial-info-decomp/data/generated/wfi_decoders/diffweights/choice/choice_decom_subsampled
+# /usr/people/kundu/code/ibl-partial-info-decomp/data/generated/significant_wfi_decoders/with_decomposition/
