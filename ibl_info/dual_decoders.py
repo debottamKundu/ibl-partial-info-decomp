@@ -500,3 +500,151 @@ def run_dual_region_decoder_bootstrapping_hyperparamopt(
 
     print("Bootstrapping complete.")
     return results
+
+
+# run decoding on entire subset, so no bootstrapping at all
+
+
+def run_dual_region_decoder_all_data(
+    neural_data_A,
+    neural_data_B,
+    trial_labels,
+    congruent_mask=None,
+    incongruent_mask=None,
+    n_splits=5,
+    shuffle_labels=False,  # Set to True for null distribution runs
+    param_grid=None,
+):
+    """
+    Runs a single-pass Nested CV for two regions with HPO and trial weighting.
+    No bootstrapping (neuron subsampling) - uses all provided neurons.
+    """
+
+    y = trial_labels.flatten().copy()
+    if shuffle_labels:
+        np.random.shuffle(y)
+
+    if param_grid is None:
+        param_grid = {"clf__C": [1e-3, 0.01, 0.1, 1, 10, 100]}
+
+    X_A, X_B = neural_data_A, neural_data_B
+    n_trials, n_neurons_A = X_A.shape
+    _, n_neurons_B = X_B.shape
+
+    cong_mask = (
+        np.array(congruent_mask).flatten().astype(bool) if congruent_mask is not None else None
+    )
+    incong_mask = (
+        np.array(incongruent_mask).flatten().astype(bool) if incongruent_mask is not None else None
+    )
+
+    n_classes = len(np.unique(y))
+    probs_A = np.zeros((n_trials, n_classes))
+    probs_B = np.zeros((n_trials, n_classes))
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True)
+
+    for train_idx, test_idx in skf.split(X_A, y):
+        y_train = y[train_idx]
+
+        if cong_mask is None:
+            weights = compute_sample_weight(class_weight="balanced", y=y_train)
+        else:
+            weights = compute_four_group_weights(y_train, cong_mask[train_idx])
+
+        pipe_A = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("clf", LogisticRegression(solver="liblinear", max_iter=1000)),
+            ]
+        )
+        pipe_B = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("clf", LogisticRegression(solver="liblinear", max_iter=1000)),
+            ]
+        )
+
+        grid_A = GridSearchCV(pipe_A, param_grid, cv=3, scoring="balanced_accuracy")
+        grid_B = GridSearchCV(pipe_B, param_grid, cv=3, scoring="balanced_accuracy")
+
+        grid_A.fit(X_A[train_idx], y_train, clf__sample_weight=weights)
+        grid_B.fit(X_B[train_idx], y_train, clf__sample_weight=weights)
+
+        probs_A[test_idx] = grid_A.predict_proba(X_A[test_idx])
+        probs_B[test_idx] = grid_B.predict_proba(X_B[test_idx])
+
+    preds_A, preds_B = np.argmax(probs_A, axis=1), np.argmax(probs_B, axis=1)
+
+    results = {
+        "accuracy_A": accuracy_score(y, preds_A),
+        "accuracy_B": accuracy_score(y, preds_B),
+        "balanced_acc_A": balanced_accuracy_score(y, preds_A),
+        "balanced_acc_B": balanced_accuracy_score(y, preds_B),
+        "probs_A": probs_A,
+        "probs_B": probs_B,
+        "y_true": y,
+    }
+
+    if cong_mask is not None:
+        results["y_cong"] = y[cong_mask]
+        results["probs_A_cong"] = probs_A[cong_mask]
+        results["probs_B_cong"] = probs_B[cong_mask]
+        results["balanced_acc_A_cong"] = balanced_accuracy_score(
+            y[cong_mask], np.argmax(probs_A[cong_mask], axis=1)
+        )
+
+    if incong_mask is not None:
+        results["y_incong"] = y[incong_mask]
+        results["probs_A_incong"] = probs_A[incong_mask]
+        results["probs_B_incong"] = probs_B[incong_mask]
+        results["balanced_acc_A_incong"] = balanced_accuracy_score(
+            y[incong_mask], np.argmax(probs_A[incong_mask], axis=1)
+        )
+
+    return results
+
+
+def complete_decoder_pid_with_null(
+    target,
+    spikes_a,
+    spikes_b,
+    congruent_mask,
+    incongruent_mask,
+    n_permutations=50,
+):
+    """
+    Runs one real decoder (returning full PID data) and
+    n_permutations of null decoders (returning only accuracies).
+    """
+
+    print("Running Real Decoder...")
+    decoder_results = run_dual_region_decoder_all_data(
+        neural_data_A=spikes_a,
+        neural_data_B=spikes_b,
+        trial_labels=target,
+        congruent_mask=congruent_mask,
+        incongruent_mask=incongruent_mask,
+        shuffle_labels=False,
+    )
+
+    null_results = []
+    print(f"Generating Null Accuracies ({n_permutations} iterations)...")
+
+    for i in range(n_permutations):
+        res_null = run_dual_region_decoder_all_data(
+            neural_data_A=spikes_a,
+            neural_data_B=spikes_b,
+            trial_labels=target,
+            congruent_mask=congruent_mask,
+            incongruent_mask=incongruent_mask,
+            shuffle_labels=True,
+        )
+
+        null_metrics = {k: v for k, v in res_null.items() if "acc" in k}
+        null_results.append(null_metrics)
+
+        if (i + 1) % 25 == 0:
+            print(f"  Completed {i + 1}/{n_permutations} iterations.")
+
+    return decoder_results, null_results

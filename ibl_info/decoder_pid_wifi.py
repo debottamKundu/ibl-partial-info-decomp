@@ -15,7 +15,7 @@ from sklearn.utils import compute_sample_weight
 from tqdm import tqdm
 from ibl_info.decoder_pid import compute_decoder_pid
 from ibl_info.decoder_utils import load_specific_regions
-from ibl_info.dual_decoders import compute_null_distribution
+from ibl_info.dual_decoders import complete_decoder_pid_with_null, compute_null_distribution
 from ibl_info.prepare_data_pid import get_new_cinc_intervals, get_new_cinc_intervals_choice
 from ibl_info.utils import check_config, epoch_events
 from one.api import ONE
@@ -66,6 +66,89 @@ def check_minimum(data_epoch, actual_regions):
         new_data_epoch.append(new_region_data)
 
     return new_data_epoch, regions_used_acronyms
+
+
+def wifi_pairs_with_all_data(eid, epoch):
+
+    align_event = epoch_events(epoch)  # should default to stimon
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
+
+    sl = SessionLoader(one, eid=eid)
+    trials, mask = load_trials_and_mask(
+        one,
+        eid,
+        sess_loader=sl,  # using session loader to load trials so that we get proper probability
+        exclude_nochoice=True,
+        exclude_unbiased=True,
+    )
+    trials = trials[mask]
+
+    # if only high contrast, we subset here
+    # sanity check
+
+    align_times = trials[align_event].values
+
+    if epoch == "stim":
+        intervals, target_variable, congruent_flags, incongruent_flags = get_new_cinc_intervals(
+            trials, epoch
+        )
+    elif epoch == "choice":
+        intervals, target_variable, congruent_flags, incongruent_flags = (
+            get_new_cinc_intervals_choice(trials, epoch)
+        )
+
+    # remember there are pairs of regions now
+    all_regions = config["widefield_regions"]
+
+    data_epoch, actual_regions = prepare_widefield(
+        one,
+        eid,
+        hemisphere=config["hemisphere"],
+        regions=all_regions,
+        align_times=align_times,
+        frame_window=config["frames"],
+        functional_channel=470,
+        stage_only=False,
+    )
+
+    total_frames = data_epoch[0].shape[1]  # type: ignore
+    data_epoch, used_regions = check_minimum(data_epoch, actual_regions)
+    region_combos = region_combinations(len(used_regions))  # type: ignore
+
+    region_pickle = {}
+    for frame_idx in range(total_frames):
+        frame_pickle = {}
+        for region_pairs in tqdm(region_combos, desc="region pairs "):
+
+            region_a_idx = region_pairs[0]
+            region_b_idx = region_pairs[1]
+
+            region_a = data_epoch[region_a_idx][frame_idx, :].T
+            region_b = data_epoch[region_b_idx][frame_idx, :].T
+
+            key = f"{used_regions[region_a_idx]}_{used_regions[region_b_idx]}"
+
+            decoder_results, null_results = complete_decoder_pid_with_null(
+                target=target_variable,
+                spikes_a=region_a,
+                spikes_b=region_b,
+                congruent_mask=congruent_flags,
+                incongruent_mask=incongruent_flags,
+            )
+
+            temp = {}
+            temp["decoder_results"] = decoder_results
+            temp["null_results"] = null_results
+            frame_pickle[key] = temp
+
+        region_pickle[frame_idx] = frame_pickle
+
+    return region_pickle
 
 
 def wifi_pairs_of_regions(eid, epoch):
@@ -297,11 +380,23 @@ def process_session(session_id):
         return -1
 
 
-def run_wfi():
-    for session in tqdm(sessions, desc="sessions"):  # type: ignore
-        id = process_session(session)
-        print(id)
-    # n_cores = os.cpu_count() - 4  # type: ignore
+def run_wfi_on_entire_data(session_id):
+
+    eid = session_id
+    epoch = config["epoch"]
+
+    suffix = f"{epoch}"
+    suffix += "entire_data"
+
+    try:
+        region_pickle = wifi_pairs_with_all_data(eid, epoch)
+
+        with open(f"./data/generated/{eid}_wfi_{suffix}.pkl", "wb") as f:
+            pkl.dump(region_pickle, f)
+        return 1
+    except Exception as e:
+        print(e)
+        return -1
 
 
 if __name__ == "__main__":
@@ -318,7 +413,11 @@ if __name__ == "__main__":
 
     config["epoch"] = "stim"
 
-    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(process_session)(session) for session in sessions)  # type: ignore
+    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(run_wfi_on_entire_data)(session) for session in sessions)  # type: ignore
+
+    config["epoch"] = "choice"
+
+    results = Parallel(n_jobs=n_cores, verbose=10)(delayed(run_wfi_on_entire_data)(session) for session in sessions)  # type: ignore
 
     # results = Parallel(n_jobs=4, verbose=10)(
     #     delayed(process_null_distributions)(session) for session in sessions  # type: ignore
