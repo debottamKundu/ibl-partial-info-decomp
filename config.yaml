@@ -8,6 +8,8 @@ decoder_output_only: False
 min_units_decoding: 10
 n_bins_decoding: 3
 flexible_bounds: False
+#manifold
+use_sliding_window: False
 # general parameters
 n_bootstraps_decoding : 20
 discretize_decoding: 2
@@ -20,6 +22,7 @@ single_cell_filter: True
 mi_filter: True
 decoder_filter: True
 discretize: 1
+min_units: 5
 # bias corrections
 repeats_for_bias_correction: 5
 bias_correction: "qe"
