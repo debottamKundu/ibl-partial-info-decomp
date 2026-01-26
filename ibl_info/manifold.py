@@ -69,7 +69,12 @@ def process_single_session(
     Loads one session, extracts spikes for requested regions, and computes PETHs.
     """
 
-    one_local = ONE()
+    one_local = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
     br_local = BrainRegions()
     session_results = {}
 
@@ -261,7 +266,12 @@ def plot_pcas_and_euclids(accumulated_data):
 
 if __name__ == "__main__":
 
-    one = ONE()
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
     print("Querying BWM Units...")
 
     units_df = bwm_units(one)
