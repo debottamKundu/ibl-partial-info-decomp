@@ -155,15 +155,16 @@ def process_single_session(
         return session_results
 
     except Exception as e:
+        print(e)
         return None
 
 
 def plot_pcas_and_euclids(accumulated_data):
 
     for region in MY_REGIONS:
-        if not any(accumulated_data[region]["Stimulus"]):
-            print(f"Skipping {region} (Insufficient Data)")
-            continue
+        # if not any(accumulated_data[region]["Stimulus"]):
+        #     print(f"Skipping {region} (Insufficient Data)")
+        #     continue
 
         print(f"\n--- Visualizing Region: {region} ---")
 
@@ -281,7 +282,6 @@ if __name__ == "__main__":
     subset_df = bwm_df[bwm_df["pid"].isin(relevant_pids)]
 
     task_list = [(row["pid"], row["eid"]) for _, row in subset_df.iterrows()]
-    # task_list = task_list[:20] # Debug toggle
 
     MAX_WORKERS = 8
 

@@ -157,9 +157,12 @@ if __name__ == "__main__":
         "SIM",
         "IP",
     ]
-    
+
     discretizer = config["discretize"]
     run_flattened(important_regions, "choice", discretizer=discretizer)
+
+    # also run stimulus
+    run_flattened(important_regions, "stim", discretizer=discretizer)
     # 1 is the alternate method
     # can i somehow use the nbins?
 

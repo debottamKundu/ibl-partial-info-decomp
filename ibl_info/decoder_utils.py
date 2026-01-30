@@ -219,7 +219,8 @@ def congregate_data(files, epoch):
     )
 
 
-def plot_all_rsis(rsi_congruent, rsi_incongruent):
+def plot_all_rsis(rsi_congruent, rsi_incongruent, title):
+    plt.style.use("../figures.style")
     fig, ax = plt.subplots(figsize=(6, 6))
     sns.despine()
     a = np.mean(rsi_incongruent, axis=0)[0]
@@ -230,7 +231,8 @@ def plot_all_rsis(rsi_congruent, rsi_incongruent):
         np.arange(2),
         [a, b],
         edgecolor="k",
-        color=["#FF4D4D", "#4D79FF"],
+        color=["#FDBF6F", "#A6CEE3"],
+        # color=["#FF4D4D", "#4D79FF"],
         yerr=[c, d],
         capsize=2,
     )
@@ -262,9 +264,11 @@ def plot_all_rsis(rsi_congruent, rsi_incongruent):
     plt.text(text_x, text_y, p_value_text, ha="center", va="bottom", fontsize=12)
     ax.set_xticks(np.arange(2), ["Incongruent", "Congruent"])
     ax.set_ylabel("RSI")
+    ax.set_title(f"{title}")
+    # ax.set_ylim(-0.015, 0.035)
 
 
-def plot_all_decompositions(redundancy, synergy):
+def plot_all_decompositions(redundancy, synergy, title):
     fig, ax = plt.subplots(figsize=(8, 8))
     redundancy_means = np.mean(redundancy[:, 0, :], axis=0)
     redundancy_sems = np.std(redundancy[:, 0, :], axis=0) / np.sqrt(len(redundancy))
@@ -316,6 +320,7 @@ def plot_all_decompositions(redundancy, synergy):
     plt.text(text_x, line_syn, p_syn_text, ha="center", va="bottom", fontsize=12)
     ax.set_ylabel("Information (in bits)")
     ax.legend()
+    ax.set_title(f"{title}")
     ax.set_xticks(np.arange(2) + 0.2, ["Redundancy", "Synergy"])
 
 
@@ -376,7 +381,8 @@ def get_mean_accuracies(files, epoch):
     return info_dict
 
 
-def plot_accuracies(files, epoch, region_names):
+def plot_accuracies(files, epoch, region_names, title=None):
+    plt.style.use("../figures.style")
     accuracies = get_mean_accuracies(files, epoch)
 
     mean_per_region = []
@@ -394,16 +400,24 @@ def plot_accuracies(files, epoch, region_names):
             continue
         else:
             individual_values.append(accuracies[x])
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(7, 5))
     sns.stripplot(individual_values, color="grey", alpha=0.75, edgecolor="k", linewidth=0.5)
     sns.despine()
-    ax.bar(np.arange(len(mean_per_region)), mean_per_region[:, 0], edgecolor="k", alpha=0.75)
+    ax.bar(
+        np.arange(len(mean_per_region)),
+        mean_per_region[:, 0],
+        edgecolor="k",
+        color="lightgreen",
+    )
     ax.axhline(0.5, linestyle="--")
     ax.set_xticks(np.arange(len(region_names)), region_names, rotation=90)
     ax.set_ylabel("Balanced accuracy")
 
     ax.set_ylim(0, 0.95)
-    ax.set_title(f"{epoch}")
+    if title is not None:
+        ax.set_title(title)
+    else:
+        ax.set_title(f"{epoch}")
 
 
 def compute_means(

@@ -16,11 +16,11 @@ discretize_decoding: 2
 epoch: "stim"
 recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pairwise_decoders/stim/allsessions/equidistant_5bins/"
 # single cell parameters
-n_bins: 3
+n_bins: 4
 subset: False
 single_cell_filter: True
 mi_filter: True
-decoder_filter: True
+decoder_filter: False
 discretize: 1
 min_units: 5
 # bias corrections

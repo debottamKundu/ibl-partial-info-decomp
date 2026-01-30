@@ -246,7 +246,6 @@ def convert_pairs_into_arrays(pairwise_comparisons):
 
 
 def plot_region_wise_tvmi(final_dict):
-
     number_of_regions = final_dict["number_of_regions"]
     region_means_rsi = final_dict["region_means_rsi"]
     region_means_tvmi = final_dict["region_means_tvmi"]
@@ -256,7 +255,8 @@ def plot_region_wise_tvmi(final_dict):
     region_names = final_dict["region_names"]
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    color = ["#4D79FF", "#FF4D4D"]
+    # color = ["#4D79FF", "#FF4D4D"]
+    color = ["#FDBF6F", "#A6CEE3"]
     ax.bar(
         np.arange(number_of_regions),
         region_means_rsi[:, 0],
@@ -276,7 +276,7 @@ def plot_region_wise_tvmi(final_dict):
         yerr=region_stds_rsi[:, 1] / np.sqrt(region_means_count[:, 3]),
     )
     ax.legend()
-    ax.set_ylabel("Information \nSynergy-Redundancy for bar, average MI for scatter")
+    ax.set_ylabel("Information (in bits)")
     ax.set_xlabel("Regions")
     ax.set_xticks(np.arange(number_of_regions), region_names, rotation=90)
 
@@ -343,7 +343,7 @@ def plot_counts(final_dict):
 
 
 ## RSI plots
-def rsi_plots(final_dict):
+def rsi_plots(final_dict, condition):
     number_of_regions = final_dict["number_of_regions"]
     region_means_rsi = final_dict["region_means_rsi"]
     region_means_count = final_dict["region_means_count"]
@@ -385,7 +385,8 @@ def rsi_plots(final_dict):
             np.nanmean(means_regions[:, 1]),
         ],
         edgecolor="k",
-        color=["#FF4D4D", "#4D79FF"],
+        # color=["#FF4D4D", "#4D79FF"],
+        color=["#FDBF6F", "#A6CEE3"],
         alpha=0.75,
         yerr=[
             np.nanstd(means_regions[:, 0]) / np.sqrt(len(means_regions)),
@@ -395,7 +396,7 @@ def rsi_plots(final_dict):
     )
 
     ax.set_xticks(np.arange(2), ["Incongruent", "Congruent"])
-    ax.set_title("All regions")
+    ax.set_title(f"{condition}")
     ax.set_ylabel("RSI")
 
     # is it significant?
@@ -432,6 +433,7 @@ def rsi_plots(final_dict):
     plt.text(text_x, text_y, p_value_text, ha="center", va="bottom", fontsize=12)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    # ax.set_ylim(-0.02, 0.035)
 
 
 def rsi_collate(final_dict):

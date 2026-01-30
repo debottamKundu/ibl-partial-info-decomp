@@ -15,7 +15,7 @@ import numpy as np
 from iblatlas.atlas import BrainRegions
 from matplotlib import pyplot as plt
 import seaborn as sns
-import pandas as pd 
+import pandas as pd
 import itertools
 import pickle as pkl
 from tqdm import tqdm
@@ -78,7 +78,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 print("MI filter applied")
                 # change this here
                 if config["epoch"] == "stim":
-                    filename = f"./data/generated/cellmi/pseudo_new/mi_significant_neurons_properpseudo_{session_id}_stim_{addendum}_{n_bins}.pkl"
+                    filename = f"./data/generated/cellmi/pseudo/mi_significant_neurons_{session_id}_stim.pkl"
                 elif config["epoch"] == "choice":
                     # filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
                     # use new filename
@@ -86,6 +86,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                     if config["discretize"] == 2:
                         addendum = "_equi"
                     # TODO: find a cleaner solution for the filename
+
                     filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo_{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
