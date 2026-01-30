@@ -82,19 +82,19 @@ def mi_per_neuron_permuted(
     )
     # use original permutation statistics
     mi_null = np.zeros(n_permutations)
-
-    # stim_shuffled = np.random.permutation(decoding_variable)
-    # mi_null[i] = info.corrected_mutual_information(  # type: ignore
-    #     source=spikes, target=stim_shuffled, unbiased_measure="plugin"
-    # )
     if epoch == "stim":
-        for i in range(n_permutations):
-            pseudo_session = generate_pseudo_session(trials, generate_choices=False)
-            pseudo_session = pseudo_session[mask]
-            pseudo_targets = generate_target(pseudo_session)
-            mi_null[i] = info.corrected_mutual_information(  # type: ignore
-                source=spikes, target=pseudo_targets, unbiased_measure="plugin"
-            )
+        stim_shuffled = np.random.permutation(decoding_variable)
+        mi_null[i] = info.corrected_mutual_information(  # type: ignore
+            source=spikes, target=stim_shuffled, unbiased_measure="plugin"
+        )
+    # if epoch == "stim":
+    #     for i in range(n_permutations):
+    #         pseudo_session = generate_pseudo_session(trials, generate_choices=False)
+    #         pseudo_session = pseudo_session[mask]
+    #         pseudo_targets = generate_target(pseudo_session)
+    #         mi_null[i] = info.corrected_mutual_information(  # type: ignore
+    #             source=spikes, target=pseudo_targets, unbiased_measure="plugin"
+    #         )
     elif epoch == "choice":
         pseudo_session_targets = generate_pseudosession_multiple(one, session_id, n_permutations)
         for i in range(n_permutations):
@@ -265,7 +265,7 @@ def run_flattened(list_of_regions, epoch):
 
     for eid, eid_pickle in eid_data.items():
         with open(
-            f"./data/generated/mi_significant_neurons_properpseudo_{eid}_{epoch}_{suffix}.pkl",
+            f"./data/generated/mi_significant_neurons_pseudo_{eid}_{epoch}_{suffix}.pkl",
             "wb",
         ) as f:
             pkl.dump(eid_pickle, f)
@@ -276,3 +276,6 @@ def run_flattened(list_of_regions, epoch):
 if __name__ == "__main__":
     important_regions = config["stim_prior_regions"]
     run_flattened(important_regions, "stim")
+
+    important_regions = config["stim_prior_regions"]
+    run_flattened(important_regions, "choice")
