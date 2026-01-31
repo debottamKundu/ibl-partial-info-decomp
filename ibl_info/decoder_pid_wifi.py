@@ -102,8 +102,8 @@ def wifi_pairs_with_all_data(eid, epoch):
             get_new_cinc_intervals_choice(trials, epoch)
         )
 
-    # remember there are pairs of regions now
-    all_regions = config["widefield_regions"]
+    # run it on everything
+    all_regions = config["widefield_all"]
 
     data_epoch, actual_regions = prepare_widefield(
         one,

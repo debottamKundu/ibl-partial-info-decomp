@@ -31,7 +31,7 @@ min_rt: 0.08
 max_rt: None
 min_behav_trials: 10
 # wifi data
-frames: [0,1]
+frames: [-1,1]
 hemisphere: ("left", "right")
 freeze: None
 # prior models
@@ -66,8 +66,7 @@ stim_prior_regions : [
         "SIM",
         "IP",
     ]
-region_defaults: {
-  'widefield': [
+'widefield_all': [
     [ "ACAd" ],
     [ "AUDd" ],
     [ "AUDp" ],
@@ -99,7 +98,6 @@ region_defaults: {
     [ "VISpl" ],
     [ "VISpm" ],
     [ "VISpor" ],
-    [ "VISrl" ],
-  ]}
+    [ "VISrl" ],]
 widefield_regions:  [ ["MOs"], ["SSp-ul"], ["VISam"], ["VISl"], ["VISp"], ["ACAd"], ["PL"], ["RSPv"], ["VISa"],
 ]
