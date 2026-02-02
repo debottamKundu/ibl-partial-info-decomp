@@ -32,6 +32,7 @@ import concurrent.futures
 import functools
 from ibl_info.selective_decomposition import run_analysis_single_session, filter_eids
 from ibl_info.utils import check_config
+import traceback
 
 config = check_config()
 
@@ -61,6 +62,7 @@ def prepare_and_run_data(task_tuple):
             return region, eid, information_pickle
     except Exception as e:
         print(f"Error regarding {eid} in region {region}: {e}")
+        traceback.print_exc()
         return region, eid, None
 
 

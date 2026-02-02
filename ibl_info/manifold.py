@@ -13,6 +13,7 @@ from scipy.ndimage import convolve1d
 import traceback
 
 config = check_config()
+CORRECT = False
 MY_REGIONS = config["stim_prior_regions"]
 MIN_NEURONS = config["min_units"]
 BIN_SIZE = 0.01  # 10ms
@@ -35,7 +36,7 @@ COND_NAMES = ["L_Cong", "L_Incong", "R_Cong", "R_Incong"]
 COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
-def get_trial_masks(trials):
+def get_trial_masks(trials, correct=True):
     """
     Returns boolean masks for conditions.
     Strictly filters for CORRECT trials (feedbackType == 1).
@@ -48,6 +49,9 @@ def get_trial_masks(trials):
     is_L_block = trials["probabilityLeft"] == 0.8
     is_R_block = trials["probabilityLeft"] == 0.2
     is_correct = trials["feedbackType"] == 1
+
+    if not correct:
+        is_correct = ~is_correct  # essentially wrong
 
     masks["L_Cong"] = has_contrast_L & is_L_block & is_correct
     masks["L_Incong"] = has_contrast_L & is_R_block & is_correct
@@ -63,7 +67,15 @@ def calculate_euclidean_dist(vec_a, vec_b):
 
 
 def process_single_session(
-    pid, eid, requested_regions, epochs_config, use_slide, win_size, stride, bin_simple
+    pid,
+    eid,
+    requested_regions,
+    epochs_config,
+    use_slide,
+    win_size,
+    stride,
+    bin_simple,
+    correct=True,
 ):
     """
     Loads one session, extracts spikes for requested regions, and computes PETHs.
@@ -86,7 +98,7 @@ def process_single_session(
 
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
-        masks = get_trial_masks(trials)
+        masks = get_trial_masks(trials, correct)
 
         if np.sum(masks["Left"]) < 5 or np.sum(masks["Right"]) < 5:
             return None
@@ -302,6 +314,7 @@ if __name__ == "__main__":
                 BIN_SIZE,
                 STRIDE,
                 BIN_SIZE,
+                correct=CORRECT,
             ): pid
             for (pid, eid) in task_list
         }
@@ -316,7 +329,13 @@ if __name__ == "__main__":
 
     print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    save_path = "./data/generated/bwm_accumulated_data.pkl"
+    addendum = ""
+    if CORRECT:
+        addendum += "_correct"
+    else:
+        addendum += "_incorrect"
+
+    save_path = f"./data/generated/bwm_accumulated_data_{addendum}.pkl"
 
     print(f"\nSaving data to {save_path}...")
     with open(save_path, "wb") as f:
