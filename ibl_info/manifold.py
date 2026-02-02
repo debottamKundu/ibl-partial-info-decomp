@@ -13,13 +13,12 @@ from scipy.ndimage import convolve1d
 import traceback
 
 config = check_config()
-CORRECT = False
 MY_REGIONS = config["stim_prior_regions"]
 MIN_NEURONS = config["min_units"]
 BIN_SIZE = 0.01  # 10ms
 STRIDE = 0.001  # 1ms
 USE_SLIDING_WINDOW = config["use_sliding_window"]
-
+MIN_TRIALS = 1  # Minimum trials per condition to include session
 
 EPOCHS = {
     "Quiescent": {
@@ -32,14 +31,26 @@ EPOCHS = {
     "Choice": {"align": "firstMovement_times", "offset": 0.0, "t_pre": 0.15, "t_post": 0.0},
 }
 
-COND_NAMES = ["L_Cong", "L_Incong", "R_Cong", "R_Incong"]
-COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
+# --- UPDATED: 8 Conditions ---
+COND_NAMES = [
+    "L_Cong_Corr",
+    "L_Cong_Err",
+    "L_Incong_Corr",
+    "L_Incong_Err",
+    "R_Cong_Corr",
+    "R_Cong_Err",
+    "R_Incong_Corr",
+    "R_Incong_Err",
+]
+
+# Base colors for the 4 types (Dark Blue, Light Blue, Dark Red, Light Red)
+# We will use Solid Lines for Correct, Dashed for Error
+BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
-def get_trial_masks(trials, correct=True):
+def get_trial_masks(trials):
     """
-    Returns boolean masks for conditions.
-    Strictly filters for CORRECT trials (feedbackType == 1).
+    Returns boolean masks for 8 conditions (Correct & Error).
     """
     masks = {}
 
@@ -48,39 +59,31 @@ def get_trial_masks(trials, correct=True):
 
     is_L_block = trials["probabilityLeft"] == 0.8
     is_R_block = trials["probabilityLeft"] == 0.2
+
     is_correct = trials["feedbackType"] == 1
+    is_error = trials["feedbackType"] == -1
 
-    if not correct:
-        is_correct = ~is_correct  # essentially wrong
+    # Left Block Conditions
+    masks["L_Cong_Corr"] = has_contrast_L & is_L_block & is_correct
+    masks["L_Cong_Err"] = has_contrast_L & is_L_block & is_error
+    masks["R_Incong_Corr"] = has_contrast_R & is_L_block & is_correct
+    masks["R_Incong_Err"] = has_contrast_R & is_L_block & is_error
 
-    masks["L_Cong"] = has_contrast_L & is_L_block & is_correct
-    masks["L_Incong"] = has_contrast_L & is_R_block & is_correct
-    masks["R_Cong"] = has_contrast_R & is_R_block & is_correct
-    masks["R_Incong"] = has_contrast_R & is_L_block & is_correct
+    # Right Block Conditions
+    masks["R_Cong_Corr"] = has_contrast_R & is_R_block & is_correct
+    masks["R_Cong_Err"] = has_contrast_R & is_R_block & is_error
+    masks["L_Incong_Corr"] = has_contrast_L & is_R_block & is_correct
+    masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
 
     return masks
 
 
-def calculate_euclidean_dist(vec_a, vec_b):
-    """Calculates dist between two population vectors (axis=1 is neurons)."""
-    return np.linalg.norm(vec_a - vec_b, axis=1)
-
-
 def process_single_session(
-    pid,
-    eid,
-    requested_regions,
-    epochs_config,
-    use_slide,
-    win_size,
-    stride,
-    bin_simple,
-    correct=True,
+    pid, eid, requested_regions, epochs_config, use_slide, win_size, stride, bin_simple
 ):
     """
-    Loads one session, extracts spikes for requested regions, and computes PETHs.
+    Loads one session, extracts spikes, and computes PETHs for 8 conditions.
     """
-
     one_local = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         password="international",
@@ -91,28 +94,32 @@ def process_single_session(
     session_results = {}
 
     try:
-
         spikes, clusters = load_good_units(one_local, pid)
         trials, mask = load_trials_and_mask(one_local, eid)
         trials = {k: v[mask] for k, v in trials.items()}
 
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
-        masks = get_trial_masks(trials, correct)
+        # Get masks for all 8 conditions
+        masks = get_trial_masks(trials)
 
-        if np.sum(masks["Left"]) < 5 or np.sum(masks["Right"]) < 5:
-            return None
+        # Check sufficiency: If any condition has 0 trials, we might want to skip
+        # (or handle gracefully, but for PCA we need data).
+        # Note: Error trials on Congruent blocks are rare. This might filter many sessions.
+        for cond in COND_NAMES:
+            if np.sum(masks[cond]) < MIN_TRIALS:
+                # Optional: You could return None here to drop the session
+                # For now, strictly requiring data for all 8 to make PCA valid
+                return None
 
         acronyms = br_local.id2acronym(clusters["atlas_id"], mapping="Beryl")
 
         for region in requested_regions:
-
             in_region = np.isin(acronyms, [region])
             if np.sum(in_region) < MIN_NEURONS:
                 continue
 
             target_ids = clusters["cluster_id"][in_region]
-
             spike_mask = np.isin(all_spike_ids, target_ids)
             region_spike_times = spikes["times"][spike_mask]
             region_spike_ids = all_spike_ids[spike_mask]
@@ -124,14 +131,10 @@ def process_single_session(
                 offset = params.get("offset", 0.0)
 
                 for cond in COND_NAMES:
-                    if np.sum(masks[cond]) < 1:
-                        return None
-
                     base_times = trials[params["align"]][masks[cond]].values
                     align_times = base_times + offset
 
                     if use_slide:
-
                         binned, _ = bin_spikes2D(
                             region_spike_times,
                             region_spike_ids,
@@ -141,14 +144,11 @@ def process_single_session(
                             params["t_post"],
                             stride,
                         )
-
                         w_points = int(win_size / stride)
                         kernel = np.ones(w_points) / w_points
                         smoothed = convolve1d(binned, kernel, axis=-1, mode="nearest")
-
                         psth = np.mean(smoothed, axis=0)
                     else:
-
                         binned, _ = bin_spikes2D(
                             region_spike_times,
                             region_spike_ids,
@@ -162,116 +162,133 @@ def process_single_session(
 
                     epoch_stack.append(psth)
 
+                # Stack: (Neurons, Time * 8_Conditions)
                 session_results[region][epoch_name] = np.hstack(epoch_stack)
 
         return session_results
 
     except Exception as e:
-        print(e)
+        print(f"Error in {eid}: {e}")
         return None
 
 
 def plot_pcas_and_euclids(accumulated_data):
-
     for region in MY_REGIONS:
-        # if not any(accumulated_data[region]["Stimulus"]):
-        #     print(f"Skipping {region} (Insufficient Data)")
-        #     continue
-
         print(f"\n--- Visualizing Region: {region} ---")
 
         epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
 
+        # --- FIG 1: PCA State Space ---
         fig1 = plt.figure(figsize=(15, 5))
-        fig1.suptitle(f"{region} | PCA State Space", fontsize=16)
+        fig1.suptitle(f"{region} | PCA Common Space (Correct + Error)", fontsize=16)
 
         for i, epoch_name in enumerate(epochs_ordered):
             session_matrices = accumulated_data[region][epoch_name]
             if not session_matrices:
                 continue
 
+            # Shape: (Neurons, Total_Time) - Stacked across sessions
             pop_matrix = np.vstack(session_matrices)
 
-            # Standard PCA on the 4 conditions
+            # PCA on ALL 8 conditions together
             pca = PCA(n_components=3)
-            X_embedded = pca.fit_transform(pop_matrix.T)
+            X_embedded = pca.fit_transform(pop_matrix.T)  # (Total_Time, 3)
 
-            n_bins = int(X_embedded.shape[0] / 4)
-            trajs = X_embedded.reshape(4, n_bins, 3)
+            n_bins = int(X_embedded.shape[0] / 8)  # Divided by 8 conditions
+            trajs = X_embedded.reshape(8, n_bins, 3)
 
             ax = fig1.add_subplot(1, 3, i + 1, projection="3d")
 
-            # Plot the 4 Conditions
-            for c in range(4):
+            # Plot the 8 Conditions
+            # Mapping 8 conditions to 4 Base Colors
+            # 0,1 -> Base0 (L_Cong)
+            # 2,3 -> Base1 (L_Incong) ...
+
+            for c in range(8):
+                color_idx = c // 2  # 0 or 1 -> 0; 2 or 3 -> 1, etc.
+                is_err = (c % 2) != 0  # Even indices are Corr, Odd are Err
+
+                style = "--" if is_err else "-"
+                alpha = 0.6 if is_err else 1.0
+                lw = 1.5 if is_err else 2.5
+
                 ax.plot(
                     trajs[c, :, 0],
                     trajs[c, :, 1],
                     trajs[c, :, 2],
-                    c=COLORS[c],
-                    label=COND_NAMES[c],
-                    lw=2,
-                    alpha=0.9,
+                    color=BASE_COLORS[color_idx],
+                    linestyle=style,
+                    label=COND_NAMES[c] if i == 0 else "",  # Legend only on first plot or specific
+                    lw=lw,
+                    alpha=alpha,
                 )
-                ax.scatter(trajs[c, 0, 0], trajs[c, 0, 1], trajs[c, 0, 2], color=COLORS[c], s=10)
+                # Mark start
+                ax.scatter(
+                    trajs[c, 0, 0],
+                    trajs[c, 0, 1],
+                    trajs[c, 0, 2],
+                    color=BASE_COLORS[color_idx],
+                    s=10,
+                )
 
             ax.set_title(epoch_name)
             ax.set_xlabel("PC1")
             ax.set_ylabel("PC2")
-            if i == 2:
-                ax.legend(loc="upper right", fontsize="xx-small")
+            if i == 0:
+                ax.legend(loc="upper left", fontsize="xx-small", frameon=False)
 
         plt.tight_layout()
         plt.show()
 
-        fig2, axes2 = plt.subplots(1, 3, figsize=(15, 4))
-        fig2.suptitle(f"{region} | Divergence Metrics", fontsize=16)
+        # --- FIG 2: 8x8 Distance Matrices ---
+        fig2, axes = plt.subplots(1, 3, figsize=(18, 5))
+        fig2.suptitle(f"{region} | Representational Distance (8x8)", fontsize=16)
+
+        if len(epochs_ordered) == 1:
+            axes = [axes]
 
         for i, epoch_name in enumerate(epochs_ordered):
-            ax = axes2[i]
+            ax = axes[i]
             session_matrices = accumulated_data[region][epoch_name]
+
             if not session_matrices:
+                ax.text(0.5, 0.5, "No Data", ha="center")
                 continue
 
             pop_matrix = np.vstack(session_matrices)
-            n_bins = int(pop_matrix.shape[1] / 4)
+            n_bins = int(pop_matrix.shape[1] / 8)
 
-            # Reshape: (Condition, Time, Neurons)
-            reshaped = np.transpose(pop_matrix.reshape(pop_matrix.shape[0], 4, n_bins), (1, 2, 0))
+            # Reshape: (Condition, Time, Neurons) -> (8, Time, Neurons)
+            reshaped = np.transpose(pop_matrix.reshape(pop_matrix.shape[0], 8, n_bins), (1, 2, 0))
 
-            # Time Axis
-            offset = EPOCHS[epoch_name].get("offset", 0)
-            t_axis = np.linspace(
-                offset - EPOCHS[epoch_name]["t_pre"], offset + EPOCHS[epoch_name]["t_post"], n_bins
-            )
+            dist_matrix = np.zeros((8, 8))
 
-            # --- Indices ---
-            # 0: L_Cong, 1: L_Incong, 2: R_Cong, 3: R_Incong
+            for r in range(8):
+                for c in range(8):
+                    if r == c:
+                        dist_matrix[r, c] = 0
+                    else:
+                        dists_over_time = np.linalg.norm(reshaped[r] - reshaped[c], axis=1)
+                        dist_matrix[r, c] = np.mean(dists_over_time)
 
-            if epoch_name == "Quiescent":
-                # Metric: Expectation (Left Block vs Right Block)
-                # Left Block = L_Cong(0) + R_Incong(3)
-                # Right Block = R_Cong(2) + L_Incong(1)
-                vec_L_Block = (reshaped[0] + reshaped[3]) / 2.0
-                vec_R_Block = (reshaped[2] + reshaped[1]) / 2.0
+            im = ax.imshow(
+                dist_matrix, cmap="magma", origin="upper"
+            )  # 'magma' often good for dists
 
-                dist = calculate_euclidean_dist(vec_L_Block, vec_R_Block)
-                ax.plot(t_axis, dist, color="purple", lw=2, label="Block Bias")
-                ax.set_title("Expectation (Block L vs R)")
+            # Add text (optional, might be crowded for 8x8)
+            for r in range(8):
+                for c in range(8):
+                    val = dist_matrix[r, c]
+                    # Only show text if meaningful size, else it's clutter
+                    ax.text(
+                        c, r, f"{val:.1f}", ha="center", va="center", color="white", fontsize=7
+                    )
 
-            else:
-                # Metric: Conflict (Congruent vs Incongruent)
-                # Left Side: 0 vs 1
-                dist_L = calculate_euclidean_dist(reshaped[0], reshaped[1])
-                # Right Side: 2 vs 3
-                dist_R = calculate_euclidean_dist(reshaped[2], reshaped[3])
-
-                ax.plot(t_axis, dist_L, color="blue", label="Left C vs I")
-                ax.plot(t_axis, dist_R, color="red", label="Right C vs I")
-                ax.set_title("Conflict (Cong vs Incong)")
-
-            ax.axvline(offset, color="k", linestyle=":")
-            ax.set_ylim(bottom=0)
-            ax.legend(fontsize="small")
+            ax.set_title(epoch_name)
+            ax.set_xticks(np.arange(8))
+            ax.set_yticks(np.arange(8))
+            ax.set_xticklabels(COND_NAMES, rotation=90, fontsize=8)
+            ax.set_yticklabels(COND_NAMES, fontsize=8)
 
         plt.tight_layout()
         plt.show()
@@ -329,13 +346,7 @@ if __name__ == "__main__":
 
     print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    addendum = ""
-    if CORRECT:
-        addendum += "_correct"
-    else:
-        addendum += "_incorrect"
-
-    save_path = f"./data/generated/bwm_accumulated_data_{addendum}.pkl"
+    save_path = f"./data/generated/bwm_accumulated_data_correct_incorrect.pkl"
 
     print(f"\nSaving data to {save_path}...")
     with open(save_path, "wb") as f:

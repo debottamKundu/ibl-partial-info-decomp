@@ -75,7 +75,6 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 mask = np.isin(np.asarray(cluster_uuids_list[0]), ccids_significant)  # type: ignore
             elif config["mi_filter"]:
 
-                print("MI filter applied")
                 # change this here
                 if config["epoch"] == "stim":
                     filename = f"{config['stim_location']}/mi_significant_neurons_pseudo_{session_id}_stim__alternate_4.pkl"
@@ -83,7 +82,9 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                     filename = f"{config['choice_location']}/mi_significant_neurons_pseudo_{session_id}_choice__alternate_4.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
+
                 mi_data_region = mi_data[region]
+                print("MI filter applied")
                 ccids = mi_data_region["uuids"]
                 significant = mi_data_region["reject"]
                 mask = np.isin(np.asarray(cluster_uuids_list[0]), np.asarray(ccids)[significant])
@@ -92,7 +93,6 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
             mask = np.ones(len(cluster_uuids_list[0]), dtype=bool)
     else:
         mask = np.ones(len(cluster_uuids_list[0]), dtype=bool)
-        # essentially status quo
 
     if len(binned_spikes) == 0:
         # return empty arrays
