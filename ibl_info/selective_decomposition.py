@@ -80,8 +80,7 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 if config["epoch"] == "stim":
                     filename = f"{config['stim_location']}/mi_significant_neurons_pseudo_{session_id}_stim__alternate_4.pkl"
                 elif config["epoch"] == "choice":
-
-                    filename = f"{config['stim_location']}/mi_significant_neurons_pseudo_{session_id}_choice__alternate_4.pkl"
+                    filename = f"{config['choice_location']}/mi_significant_neurons_pseudo_{session_id}_choice__alternate_4.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]

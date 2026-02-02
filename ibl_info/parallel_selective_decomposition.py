@@ -171,3 +171,4 @@ if __name__ == "__main__":
     # three random regions; one that has only stim but no prior; one prior but no stim, one just choice
     # random_regions = ["SCs", "VISa", "PO"]
     # run_flattened(random_regions, "stim")
+    
