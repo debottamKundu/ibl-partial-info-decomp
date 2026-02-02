@@ -78,16 +78,10 @@ def select_neurons_for_analysis_all(spikes, clusters, intervals, region, session
                 print("MI filter applied")
                 # change this here
                 if config["epoch"] == "stim":
-                    filename = f"./data/generated/cellmi/pseudo/mi_significant_neurons_{session_id}_stim.pkl"
+                    filename = f"{config['stim_location']}/mi_significant_neurons_pseudo_{session_id}_stim__alternate_4.pkl"
                 elif config["epoch"] == "choice":
-                    # filename = f"./data/generated/choice/choicesignificance/mi_significant_neurons_choice_{session_id}_choice.pkl"
-                    # use new filename
-                    addendum = ""
-                    if config["discretize"] == 2:
-                        addendum = "_equi"
-                    # TODO: find a cleaner solution for the filename
 
-                    filename = f"./data/generated/choice/significantneurons/choicesignificance_pseudo_{addendum}/mi_significant_neurons_properpseudo_{session_id}_choice.pkl"
+                    filename = f"{config['stim_location']}/mi_significant_neurons_pseudo_{session_id}_choice__alternate_4.pkl"
                 with open(filename, "rb") as f:
                     mi_data = pkl.load(f)
                 mi_data_region = mi_data[region]

@@ -23,6 +23,9 @@ mi_filter: True
 decoder_filter: False
 discretize: 1 
 min_units: 5
+# single cell significant locations
+stim_location: /usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pseudomi_4bins/stim
+choice_location: /usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pseudomi_4bins/choice
 # bias corrections
 repeats_for_bias_correction: 5
 bias_correction: "qe"
