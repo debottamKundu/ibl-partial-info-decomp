@@ -103,13 +103,9 @@ def process_single_session(
         # Get masks for all 8 conditions
         masks = get_trial_masks(trials)
 
-        # Check sufficiency: If any condition has 0 trials, we might want to skip
-        # (or handle gracefully, but for PCA we need data).
-        # Note: Error trials on Congruent blocks are rare. This might filter many sessions.
+       
         for cond in COND_NAMES:
             if np.sum(masks[cond]) < MIN_TRIALS:
-                # Optional: You could return None here to drop the session
-                # For now, strictly requiring data for all 8 to make PCA valid
                 return None
 
         acronyms = br_local.id2acronym(clusters["atlas_id"], mapping="Beryl")
@@ -331,7 +327,6 @@ if __name__ == "__main__":
                 BIN_SIZE,
                 STRIDE,
                 BIN_SIZE,
-                correct=CORRECT,
             ): pid
             for (pid, eid) in task_list
         }
