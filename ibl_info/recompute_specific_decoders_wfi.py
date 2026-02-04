@@ -171,7 +171,7 @@ def compute_eid_specific_pid(data, df, frame, eid):
     region_pairs = df_subset["pair"].values
 
     for pair in region_pairs:
-        information_array = compute_partial_id_region(data[frame][pair]["decoding_results"])
+        information_array = compute_partial_id_region(data[frame][pair]["decoder_results"])
         region_pids[pair] = information_array
 
     return region_pids
