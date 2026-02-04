@@ -177,27 +177,48 @@ def compute_eid_specific_pid(data, df, frame, eid):
     return region_pids
 
 
+def _process_single_file(file_path, df, frame):
+
+    try:
+        with open(file_path, "rb") as f:
+            data = pkl.load(f)
+        eid = file_path.rsplit("/")[-1].rsplit("_wfi")[0]
+        region_pids = compute_eid_specific_pid(data, df, frame, eid)
+
+        return (eid, region_pids)
+    except Exception as e:
+        print(f"Error processing {file_path}: {e}")
+        return None
+
+
 def process_epoch(epoch, frame):
 
     if epoch == "stim":
-        files = np.sort(glob("../data/generated/wfi_decoders_entire_data/allregions/stim/*.pkl"))
+        files = np.sort(glob("./data/generated/wfi_decoders_entire_data/allregions/stim/*.pkl"))
         signficant_df = compute_relevant_sessions(files, frame)
     elif epoch == "choice":
-        files = np.sort(glob("../data/generated/wfi_decoders_entire_data/allregions/choice/*.pkl"))
+        files = np.sort(glob("./data/generated/wfi_decoders_entire_data/allregions/choice/*.pkl"))
         signficant_df = compute_relevant_sessions(files, frame)
     else:
         raise NotImplementedError
 
-    # now what
-    animal_results = {}
-    for idx, file in tqdm(enumerate(files), desc=f"Processing files for {epoch}"):
-        with open(file, "rb") as f:
-            data = pkl.load(f)
-        eid = file.rsplit("/")[-1].rsplit("_wfi")[0]
-        region_pids = compute_eid_specific_pid(data, signficant_df, frame, eid)
-        animal_results[eid] = region_pids
-        if idx == 2:
-            break
+    # animal_results = {}
+    # for idx, file in tqdm(enumerate(files), desc=f"Processing files for {epoch}"):
+    #     try:
+    #         with open(file, "rb") as f:
+    #             data = pkl.load(f)
+    #         eid = file.rsplit("/")[-1].rsplit("_wfi")[0]
+    #         region_pids = compute_eid_specific_pid(data, signficant_df, frame, eid)
+    #         animal_results[eid] = region_pids
+    #     except Exception as e:
+    #         print(e)
+    #         continue
+
+    results = Parallel(n_jobs=8, verbose=5)(
+        delayed(_process_single_file)(file, signficant_df, frame) for file in files
+    )
+
+    animal_results = {res[0]: res[1] for res in results if res is not None}
 
     return animal_results
 
@@ -211,7 +232,7 @@ if __name__ == "__main__":
     animal_results_stim = process_epoch(epoch, frame)
 
     with open(
-        f"../data/generated/wfi_animals_entire_data_stim_significant_{frame}_{n_bins}.pkl", "wb"
+        f"./data/generated/wfi_animals_entire_data_stim_significant_{frame}_{n_bins}.pkl", "wb"
     ) as f:
         pkl.dump(animal_results_stim, f)
 
@@ -220,6 +241,6 @@ if __name__ == "__main__":
 
     animal_results_choice = process_epoch(epoch, frame)
     with open(
-        f"../data/generated/wfi_animals_entire_data_choice_significant_{frame}_{n_bins}.pkl", "wb"
+        f"./data/generated/wfi_animals_entire_data_choice_significant_{frame}_{n_bins}.pkl", "wb"
     ) as f:
         pkl.dump(animal_results_choice, f)
