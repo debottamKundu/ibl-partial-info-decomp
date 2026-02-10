@@ -31,7 +31,6 @@ EPOCHS = {
     "Choice": {"align": "firstMovement_times", "offset": 0.0, "t_pre": 0.15, "t_post": 0.0},
 }
 
-# --- UPDATED: 8 Conditions ---
 COND_NAMES = [
     "L_Cong_Corr",
     "L_Cong_Err",
@@ -48,7 +47,7 @@ COND_NAMES = [
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
-def get_trial_masks(trials):
+def get_trial_masks(trials, simple=False):
     """
     Returns boolean masks for 8 conditions (Correct & Error).
     """
@@ -75,11 +74,23 @@ def get_trial_masks(trials):
     masks["L_Incong_Corr"] = has_contrast_L & is_R_block & is_correct
     masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
 
+    if simple:
+        masks["Correct"] = is_correct
+        masks["Error"] = is_error
+
     return masks
 
 
 def process_single_session(
-    pid, eid, requested_regions, epochs_config, use_slide, win_size, stride, bin_simple
+    pid,
+    eid,
+    requested_regions,
+    epochs_config,
+    use_slide,
+    win_size,
+    stride,
+    bin_simple,
+    simple_mask=False,
 ):
     """
     Loads one session, extracts spikes, and computes PETHs for 8 conditions.
@@ -101,9 +112,11 @@ def process_single_session(
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
         # Get masks for all 8 conditions
-        masks = get_trial_masks(trials)
+        masks = get_trial_masks(trials, simple_mask)
 
-       
+        if simple_mask:
+            COND_NAMES = ["Correct", "Error"]
+
         for cond in COND_NAMES:
             if np.sum(masks[cond]) < MIN_TRIALS:
                 return None
@@ -158,7 +171,7 @@ def process_single_session(
 
                     epoch_stack.append(psth)
 
-                # Stack: (Neurons, Time * 8_Conditions)
+                # Stack: (NeuronsxTime * 8_Conditions)
                 session_results[region][epoch_name] = np.hstack(epoch_stack)
 
         return session_results
@@ -309,6 +322,7 @@ if __name__ == "__main__":
     task_list = [(row["pid"], row["eid"]) for _, row in subset_df.iterrows()]
 
     MAX_WORKERS = 8
+    simple_mask = config["simple_mask"]
 
     print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
     t0 = time.time()
@@ -327,6 +341,7 @@ if __name__ == "__main__":
                 BIN_SIZE,
                 STRIDE,
                 BIN_SIZE,
+                simple_mask,
             ): pid
             for (pid, eid) in task_list
         }
@@ -336,6 +351,7 @@ if __name__ == "__main__":
             if result:
                 for region, epoch_dict in result.items():
                     for epoch_name, matrix in epoch_dict.items():
+                        # get all animals
                         accumulated_data[region][epoch_name].append(matrix)
             print(f"Progress: {i+1}/{len(task_list)}", end="\r")
 
