@@ -194,10 +194,14 @@ def _process_single_file(file_path, df, frame):
 def process_epoch(epoch, frame):
 
     if epoch == "stim":
-        files = np.sort(glob("./data/generated/wfi_decoders_entire_data/allregions/stim/*.pkl"))
+        files = np.sort(
+            glob("./data/generated/wfi_decoders_entire_data/allregions/decoders/stim/*.pkl")
+        )
         signficant_df = compute_relevant_sessions(files, frame)
     elif epoch == "choice":
-        files = np.sort(glob("./data/generated/wfi_decoders_entire_data/allregions/choice/*.pkl"))
+        files = np.sort(
+            glob("./data/generated/wfi_decoders_entire_data/allregions/decoders/choice/*.pkl")
+        )
         signficant_df = compute_relevant_sessions(files, frame)
     else:
         raise NotImplementedError

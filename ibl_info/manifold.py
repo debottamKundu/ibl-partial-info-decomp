@@ -75,8 +75,8 @@ def get_trial_masks(trials, simple=False):
     masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
 
     if simple:
-        masks["Correct"] = is_correct
-        masks["Error"] = is_error
+        masks["Left"] = has_contrast_L & is_correct
+        masks["Right"] = has_contrast_R & is_correct
 
     return masks
 
@@ -115,7 +115,7 @@ def process_single_session(
         masks = get_trial_masks(trials, simple_mask)
 
         if simple_mask:
-            COND_NAMES = ["Correct", "Error"]
+            COND_NAMES = ["Left", "Right"]
 
         for cond in COND_NAMES:
             if np.sum(masks[cond]) < MIN_TRIALS:
@@ -357,7 +357,7 @@ if __name__ == "__main__":
 
     print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    save_path = f"./data/generated/bwm_accumulated_data_correct_incorrect.pkl"
+    save_path = f"./data/generated/bwm_accumulated_data_left_right_choice.pkl"
 
     print(f"\nSaving data to {save_path}...")
     with open(save_path, "wb") as f:
