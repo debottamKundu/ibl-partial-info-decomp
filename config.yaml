@@ -10,7 +10,8 @@ n_bins_decoding: 3
 flexible_bounds: False
 #manifold
 use_sliding_window: False
-simple_mask: True
+simple_mask: False
+difficulty: True
 # general parameters
 n_bootstraps_decoding : 20
 discretize_decoding: 2

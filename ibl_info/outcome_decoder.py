@@ -138,6 +138,57 @@ def run_decoder_nested_cv(
     return results
 
 
+def gather_data(session_id, region):
+
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
+    pids, probes = one.eid2pid(session_id)
+    if isinstance(probes, list) and len(probes) > 1:
+        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
+        spikes, clusters = merge_probes(
+            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
+        )
+    else:
+        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
+
+    trials, mask = load_trials_and_mask(
+        one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    )
+    trials = trials[mask]
+
+    # trials-feedback is the target
+    target_variable = trials["feedbackType"]
+
+    # "Quiescent": {
+    #     "align": "stimOn_times",
+    #     "offset": -0.1,  # Align to -0.1s before Stim
+    #     "t_pre": 0.5,
+    #     "t_post": 0.0,
+    # }
+
+    stimon_times = trials.stimOn_times.values
+    qu_time_on = stimon_times - 0.5
+    qu_time_off = stimon_times - 0.1
+    intervals = np.array([qu_time_on, qu_time_off]).T
+
+    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
+        spikes, clusters, intervals, [region], minimum_units=config["min_units_decoding"]
+    )  # this returns all neurons from a single region that pass qc
+
+    if len(binned_spikes) == 0:
+        print(f'Neurons less than {config["min_units_decoding"]} in {region}')
+        return {}
+
+    spike_data = binned_spikes[0]
+    target_variable[target_variable == -1] = 0
+
+    return spike_data, target_variable
+
+
 def run_feedback_decoder(session_id, region, epoch):
 
     one = ONE(

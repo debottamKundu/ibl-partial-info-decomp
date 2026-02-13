@@ -48,6 +48,61 @@ COND_NAMES = [
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
+def get_trial_masks_detailed(trials, split_difficulty=True, correct_only=True):
+    """
+    Returns boolean masks separating conditions by:
+    - Side (Left/Right)
+    - Congruence (Congruent/Incongruent)
+    - Difficulty (Hard/Easy) -> Optional
+    - Outcome (Correct) -> Optional filter
+    """
+    masks = {}
+
+    cL = trials["contrastLeft"].fillna(0)
+    cR = trials["contrastRight"].fillna(0)
+    trial_contrast = cL + cR
+
+    has_contrast_L = ~np.isnan(trials["contrastLeft"])
+    has_contrast_R = ~np.isnan(trials["contrastRight"])
+
+    is_L_block = trials["probabilityLeft"] == 0.8
+    is_R_block = trials["probabilityLeft"] == 0.2
+
+    if correct_only:
+        outcome_mask = trials["feedbackType"] == 1
+    else:
+        outcome_mask = np.ones(len(trials), dtype=bool)  # All trials
+
+    if split_difficulty:
+        is_easy = trial_contrast >= 0.25
+        is_hard = trial_contrast < 0.25
+        difficulties = {"Easy": is_easy, "Hard": is_hard}
+    else:
+        difficulties = {"All": np.ones(len(trials), dtype=bool)}
+
+    def add_mask(side_name, cong_name, diff_name, combined_mask):
+        key = f"{side_name}_{cong_name}_{diff_name}"
+        if correct_only:
+            key += "_Corr"
+        masks[key] = combined_mask & outcome_mask
+
+    for diff_name, diff_mask in difficulties.items():
+
+        # L-Cong (Stim L, Block L)
+        add_mask("L", "Cong", diff_name, has_contrast_L & is_L_block & diff_mask)
+
+        # R-Incong (Stim R, Block L)
+        add_mask("R", "Incong", diff_name, has_contrast_R & is_L_block & diff_mask)
+
+        # R-Cong (Stim R, Block R)
+        add_mask("R", "Cong", diff_name, has_contrast_R & is_R_block & diff_mask)
+
+        # L-Incong (Stim L, Block R)
+        add_mask("L", "Incong", diff_name, has_contrast_L & is_R_block & diff_mask)
+
+    return masks, list(masks.keys())
+
+
 def get_trial_masks(trials, simple=False):
     """
     Returns boolean masks for 8 conditions (Correct & Error).
@@ -91,6 +146,7 @@ def process_single_session(
     win_size,
     stride,
     bin_simple,
+    difficulty=False,
     simple_mask=False,
 ):
     """
@@ -113,7 +169,11 @@ def process_single_session(
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
         # Get masks for all 8 conditions
-        masks = get_trial_masks(trials, simple_mask)
+        if not difficulty:
+            masks = get_trial_masks(trials, simple_mask)
+        else:
+            masks, cond_names = get_trial_masks_detailed(trials)
+            COND_NAMES = cond_names
 
         if simple_mask:
             COND_NAMES = ["Left", "Right"]
@@ -462,7 +522,8 @@ if __name__ == "__main__":
                 BIN_SIZE,
                 STRIDE,
                 BIN_SIZE,
-                simple_mask,
+                difficulty=config["difficulty"],
+                simple_mask=simple_mask,
             ): pid
             for (pid, eid) in task_list
         }
@@ -478,7 +539,7 @@ if __name__ == "__main__":
 
     print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    save_path = f"./data/generated/bwm_accumulated_data_left_right_choice.pkl"
+    save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
 
     print(f"\nSaving data to {save_path}...")
     with open(save_path, "wb") as f:
