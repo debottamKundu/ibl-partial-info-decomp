@@ -2,13 +2,15 @@ import concurrent.futures
 import pickle as pkl
 import time
 from one.api import ONE
+import pandas as pd
+from tqdm import tqdm
 from brainwidemap import bwm_query, load_good_units, load_trials_and_mask, bwm_units
 from brainbox.singlecell import bin_spikes2D
 from iblatlas.regions import BrainRegions
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from ibl_info.utils import check_config
+from ibl_info.utils import check_config, compute_animal_stats
 from scipy.ndimage import convolve1d
 import traceback
 from scipy.stats import zscore
@@ -484,6 +486,23 @@ def plot_pcas_separate_decomposition_adapted(accumulated_data, region, cond_name
     plt.show()
 
 
+def compute_statistics(list_of_eids):
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        silent=True,
+        username="intbrainlab",
+    )
+    all_stats_list = []
+    for eid in tqdm(list_of_eids):
+        trials, mask = load_trials_and_mask(one, eid)
+        trials = {k: v[mask] for k, v in trials.items()}
+
+        df_stat = compute_animal_stats(trials, eid)
+        all_stats_list.append(df_stat)
+    return pd.concat(all_stats_list, ignore_index=True)
+
+
 if __name__ == "__main__":
 
     one = ONE(
@@ -502,46 +521,50 @@ if __name__ == "__main__":
 
     task_list = [(row["pid"], row["eid"]) for _, row in subset_df.iterrows()]
 
-    MAX_WORKERS = 8
-    simple_mask = config["simple_mask"]
+    list_of_eids = subset_df["eid"].unique()
+    df_all = compute_statistics(list_of_eids)
 
-    print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
-    t0 = time.time()
+    df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
+    # MAX_WORKERS = 8
+    # simple_mask = config["simple_mask"]
 
-    accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
+    # print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
+    # t0 = time.time()
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {
-            executor.submit(
-                process_single_session,
-                pid,
-                eid,
-                MY_REGIONS,
-                EPOCHS,
-                USE_SLIDING_WINDOW,
-                BIN_SIZE,
-                STRIDE,
-                BIN_SIZE,
-                difficulty=config["difficulty"],
-                simple_mask=simple_mask,
-            ): pid
-            for (pid, eid) in task_list
-        }
+    # accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
 
-        for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            result = future.result()
-            if result:
-                for region, epoch_dict in result.items():
-                    for epoch_name, matrix in epoch_dict.items():
-                        # get all animals
-                        accumulated_data[region][epoch_name].append(matrix)
-            print(f"Progress: {i+1}/{len(task_list)}", end="\r")
+    # with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    #     futures = {
+    #         executor.submit(
+    #             process_single_session,
+    #             pid,
+    #             eid,
+    #             MY_REGIONS,
+    #             EPOCHS,
+    #             USE_SLIDING_WINDOW,
+    #             BIN_SIZE,
+    #             STRIDE,
+    #             BIN_SIZE,
+    #             difficulty=config["difficulty"],
+    #             simple_mask=simple_mask,
+    #         ): pid
+    #         for (pid, eid) in task_list
+    #     }
 
-    print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
+    #     for i, future in enumerate(concurrent.futures.as_completed(futures)):
+    #         result = future.result()
+    #         if result:
+    #             for region, epoch_dict in result.items():
+    #                 for epoch_name, matrix in epoch_dict.items():
+    #                     # get all animals
+    #                     accumulated_data[region][epoch_name].append(matrix)
+    #         print(f"Progress: {i+1}/{len(task_list)}", end="\r")
 
-    save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
+    # print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    print(f"\nSaving data to {save_path}...")
-    with open(save_path, "wb") as f:
-        pkl.dump(accumulated_data, f)
-    print("Save complete.")
+    # save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
+
+    # print(f"\nSaving data to {save_path}...")
+    # with open(save_path, "wb") as f:
+    #     pkl.dump(accumulated_data, f)
+    # print("Save complete.")

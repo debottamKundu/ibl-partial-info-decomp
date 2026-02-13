@@ -247,3 +247,42 @@ FIRING_RATE = {
     np.str_("SIM"): np.float64(2.1323529411764706),
     np.str_("IP"): np.float64(5.979498861047836),
 }
+
+
+def compute_animal_stats(df, animal_id):
+    """
+    Computes stats for a single animal and adds an 'animal_id' column.
+    """
+    # ... (Same logic as before) ...
+    df = df.copy()
+
+    # Preprocessing
+    df["rt"] = df["firstMovement_times"] - df["stimOn_times"]
+    df = df[df["rt"] > 0]
+
+    df["contrastRight"] = df["contrastRight"].fillna(0)
+    df["contrastLeft"] = df["contrastLeft"].fillna(0)
+    df["signed_contrast"] = df["contrastRight"] - df["contrastLeft"]
+    df = df[df["signed_contrast"] != 0]
+
+    df["side"] = np.where(df["signed_contrast"] > 0, "Right", "Left")
+    df = df[df["probabilityLeft"] != 0.5]
+
+    conditions = [
+        (df["side"] == "Left") & (df["probabilityLeft"] > 0.5),
+        (df["side"] == "Right") & (df["probabilityLeft"] < 0.5),
+    ]
+    df["congruency"] = np.select(conditions, ["Congruent", "Congruent"], default="Incongruent")
+    df["outcome"] = df["feedbackType"].map({1: "Correct", -1: "Incorrect"})
+
+    # Group by conditions
+    stats = (
+        df.groupby(["side", "congruency", "outcome"])["rt"]
+        .agg(avg_rt="mean", trial_count="count")
+        .reset_index()
+    )
+
+    # Add the animal ID column
+    stats.insert(0, "animal_id", animal_id)
+
+    return stats
