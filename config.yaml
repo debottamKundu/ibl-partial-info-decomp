@@ -19,11 +19,13 @@ recompute_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generat
 # single cell parameters
 n_bins: 4
 subset: False
-single_cell_filter: True
-mi_filter: True
+single_cell_filter: False
+mi_filter: False
 decoder_filter: False
 discretize: 1 
 min_units: 5
+#manifold decoder
+permutations: 10
 # single cell significant locations
 stim_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pseudomi_4bins/stim"
 choice_location: "/usr/people/kundu/code/ibl-partial-info-decomp/data/generated/pseudomi_4bins/choice"

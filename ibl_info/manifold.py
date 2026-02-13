@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from ibl_info.utils import check_config
 from scipy.ndimage import convolve1d
 import traceback
+from scipy.stats import zscore
 
 config = check_config()
 MY_REGIONS = config["stim_prior_regions"]
@@ -181,126 +182,246 @@ def process_single_session(
         return None
 
 
-def plot_pcas_and_euclids(accumulated_data):
-    for region in MY_REGIONS:
-        print(f"\n--- Visualizing Region: {region} ---")
+def plot_pcas_separate_decomposition(accumulated_data, region, conditions=8):
 
-        epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
+    print(f"\n--- Visualizing Region: {region} ---")
 
-        # --- FIG 1: PCA State Space ---
-        fig1 = plt.figure(figsize=(15, 5))
-        fig1.suptitle(f"{region} | PCA Common Space (Correct + Error)", fontsize=16)
+    epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
 
-        for i, epoch_name in enumerate(epochs_ordered):
-            session_matrices = accumulated_data[region][epoch_name]
-            if not session_matrices:
-                continue
+    # --- FIG 1: PCA State Space ---
+    fig1 = plt.figure(figsize=(15, 5))
+    fig1.suptitle(f"{region} | PCA Common Space", fontsize=16)
 
-            # Shape: (Neurons, Total_Time) - Stacked across sessions
-            pop_matrix = np.vstack(session_matrices)
+    for i, epoch_name in enumerate(epochs_ordered):
+        session_matrices = accumulated_data[region][epoch_name]
+        if not session_matrices:
+            continue
 
-            # PCA on ALL 8 conditions together
-            pca = PCA(n_components=3)
-            X_embedded = pca.fit_transform(pop_matrix.T)  # (Total_Time, 3)
+        # Shape: (Neurons, Total_Time) - Stacked across sessions
+        pop_matrix = np.vstack(session_matrices)
 
-            n_bins = int(X_embedded.shape[0] / 8)  # Divided by 8 conditions
-            trajs = X_embedded.reshape(8, n_bins, 3)
+        # PCA on ALL 8 conditions together
+        pca = PCA(n_components=3)
+        X_embedded = pca.fit_transform(pop_matrix.T)  # (Total_Time, 3)
 
-            ax = fig1.add_subplot(1, 3, i + 1, projection="3d")
+        n_bins = int(X_embedded.shape[0] / conditions)  # Divided by conditions conditions
+        trajs = X_embedded.reshape(conditions, n_bins, 3)
 
-            # Plot the 8 Conditions
-            # Mapping 8 conditions to 4 Base Colors
-            # 0,1 -> Base0 (L_Cong)
-            # 2,3 -> Base1 (L_Incong) ...
+        ax = fig1.add_subplot(1, 3, i + 1, projection="3d")
 
-            for c in range(8):
-                color_idx = c // 2  # 0 or 1 -> 0; 2 or 3 -> 1, etc.
-                is_err = (c % 2) != 0  # Even indices are Corr, Odd are Err
+        # Plot the conditions Conditions
+        # Mapping conditions conditions to 4 Base Colors
+        # 0,1 -> Base0 (L_Cong)
+        # 2,3 -> Base1 (L_Incong) ...
 
-                style = "--" if is_err else "-"
-                alpha = 0.6 if is_err else 1.0
-                lw = 1.5 if is_err else 2.5
+        for c in range(conditions):
+            color_idx = c // 2  # 0 or 1 -> 0; 2 or 3 -> 1, etc.
+            is_err = (c % 2) != 0  # Even indices are Corr, Odd are Err
 
-                ax.plot(
-                    trajs[c, :, 0],
-                    trajs[c, :, 1],
-                    trajs[c, :, 2],
-                    color=BASE_COLORS[color_idx],
-                    linestyle=style,
-                    label=COND_NAMES[c] if i == 0 else "",  # Legend only on first plot or specific
-                    lw=lw,
-                    alpha=alpha,
-                )
-                # Mark start
-                ax.scatter(
-                    trajs[c, 0, 0],
-                    trajs[c, 0, 1],
-                    trajs[c, 0, 2],
-                    color=BASE_COLORS[color_idx],
-                    s=10,
-                )
+            style = "--" if is_err else "-"
+            alpha = 0.6 if is_err else 1.0
+            lw = 1.5 if is_err else 2.5
 
-            ax.set_title(epoch_name)
-            ax.set_xlabel("PC1")
-            ax.set_ylabel("PC2")
-            if i == 0:
-                ax.legend(loc="upper left", fontsize="xx-small", frameon=False)
+            ax.plot(
+                trajs[c, :, 0],
+                trajs[c, :, 1],
+                trajs[c, :, 2],
+                color=BASE_COLORS[color_idx],
+                linestyle=style,
+                label=COND_NAMES[c] if i == 0 else "",  # Legend only on first plot or specific
+                lw=lw,
+                alpha=alpha,
+            )
+            # Mark start
+            ax.scatter(
+                trajs[c, 0, 0],
+                trajs[c, 0, 1],
+                trajs[c, 0, 2],
+                color=BASE_COLORS[color_idx],
+                s=15,
+            )
 
-        plt.tight_layout()
-        plt.show()
+            ax.scatter(
+                trajs[c, -1, 0],
+                trajs[c, -1, 1],
+                trajs[c, -1, 2],
+                color=BASE_COLORS[color_idx],
+                marker="x",
+                s=20,
+                alpha=0.6,
+            )
 
-        # --- FIG 2: 8x8 Distance Matrices ---
-        fig2, axes = plt.subplots(1, 3, figsize=(18, 5))
-        fig2.suptitle(f"{region} | Representational Distance (8x8)", fontsize=16)
+        ax.set_title(epoch_name)
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        if i == 0:
+            ax.legend(loc="upper left", fontsize="xx-small", frameon=False)
 
-        if len(epochs_ordered) == 1:
-            axes = [axes]
+    plt.tight_layout()
+    plt.show()
 
-        for i, epoch_name in enumerate(epochs_ordered):
-            ax = axes[i]
-            session_matrices = accumulated_data[region][epoch_name]
 
-            if not session_matrices:
-                ax.text(0.5, 0.5, "No Data", ha="center")
-                continue
+def plot_pca_single(
+    accumulated_data, region, conditions=8, epoch="Choice", cond_names=["Left", "Right"]
+):
 
-            pop_matrix = np.vstack(session_matrices)
-            n_bins = int(pop_matrix.shape[1] / 8)
+    print(f"\n--- Visualizing Region: {region} ---")
 
-            # Reshape: (Condition, Time, Neurons) -> (8, Time, Neurons)
-            reshaped = np.transpose(pop_matrix.reshape(pop_matrix.shape[0], 8, n_bins), (1, 2, 0))
+    epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
 
-            dist_matrix = np.zeros((8, 8))
+    ax = plt.figure(figsize=(5, 5)).add_subplot(projection="3d")
+    for i, epoch_name in enumerate(epochs_ordered):
+        if epoch_name != epoch:
+            continue
 
-            for r in range(8):
-                for c in range(8):
-                    if r == c:
-                        dist_matrix[r, c] = 0
-                    else:
-                        dists_over_time = np.linalg.norm(reshaped[r] - reshaped[c], axis=1)
-                        dist_matrix[r, c] = np.mean(dists_over_time)
+        session_matrices = accumulated_data[region][epoch_name]
+        if not session_matrices:
+            continue
 
-            im = ax.imshow(
-                dist_matrix, cmap="magma", origin="upper"
-            )  # 'magma' often good for dists
+        pop_matrix = np.vstack(session_matrices)
+        pca = PCA(n_components=3)
+        X_embedded = pca.fit_transform(pop_matrix.T)  # (Total_Time, 3)
 
-            # Add text (optional, might be crowded for 8x8)
-            for r in range(8):
-                for c in range(8):
-                    val = dist_matrix[r, c]
-                    # Only show text if meaningful size, else it's clutter
-                    ax.text(
-                        c, r, f"{val:.1f}", ha="center", va="center", color="white", fontsize=7
-                    )
+        n_bins = int(X_embedded.shape[0] / conditions)  # Divided by conditions conditions
+        trajs = X_embedded.reshape(conditions, n_bins, 3)
+        for c in range(conditions):
 
-            ax.set_title(epoch_name)
-            ax.set_xticks(np.arange(8))
-            ax.set_yticks(np.arange(8))
-            ax.set_xticklabels(COND_NAMES, rotation=90, fontsize=8)
-            ax.set_yticklabels(COND_NAMES, fontsize=8)
+            style = "--"
+            alpha = 0.6
+            lw = 1.5
 
-        plt.tight_layout()
-        plt.show()
+            ax.plot(
+                trajs[c, :, 0],
+                trajs[c, :, 1],
+                trajs[c, :, 2],
+                linestyle=style,
+                label=cond_names[c],
+                lw=lw,
+                alpha=alpha,
+            )
+            # Mark start
+            ax.scatter(
+                trajs[c, 0, 0],
+                trajs[c, 0, 1],
+                trajs[c, 0, 2],
+                s=25,
+            )
+
+        ax.set_title(f"{epoch_name}: {region}")
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.legend(loc="upper left", fontsize="xx-small", frameon=False)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_pcas_separate_decomposition_adapted(accumulated_data, region, cond_names, colors=None):
+    """
+    Plots PCA trajectories for a specific region across epochs.
+    Adapts automatically to the number of conditions provided in cond_names.
+
+    Args:
+        accumulated_data (dict): Data structure containing session matrices.
+        region (str): The specific brain region key to access in accumulated_data.
+        cond_names (list of str): Names of the conditions (e.g., ['Left', 'Right'] or
+                                  ['L_Cong', 'L_Incong', 'R_Cong', 'R_Incong']).
+                                  The data is reshaped based on len(cond_names).
+        colors (list, optional): List of colors (hex, string, or tuple) matching cond_names.
+                                 If None, a default colormap is used.
+    """
+
+    n_conditions = len(cond_names)
+
+    if colors is None:
+
+        cmap = plt.get_cmap("tab10") if n_conditions <= 10 else plt.get_cmap("viridis")
+        colors = [cmap(i) for i in np.linspace(0, 1, n_conditions)]
+
+    if len(colors) < n_conditions:
+        print(
+            f"Warning: Provided {len(colors)} colors for {n_conditions} conditions. Cycling colors."
+        )
+        colors = colors * (n_conditions // len(colors) + 1)
+
+    print(f"\n--- Visualizing Region: {region} ---")
+
+    epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
+
+    fig = plt.figure(figsize=(15, 5))
+    fig.suptitle(f"{region} | PCA Common Space", fontsize=16)
+
+    for i, epoch_name in enumerate(epochs_ordered):
+
+        if epoch_name not in accumulated_data[region]:
+            continue
+
+        session_matrices = accumulated_data[region][epoch_name]
+        if not session_matrices:
+            continue
+
+        pop_matrix = np.vstack(session_matrices)
+
+        if pop_matrix.shape[1] < 3:
+            print(f"Skipping {epoch_name}: Not enough samples for 3 PCA components.")
+            continue
+
+        pca = PCA(n_components=3)
+        X_embedded = pca.fit_transform(pop_matrix.T)
+
+        total_samples = X_embedded.shape[0]
+
+        if total_samples % n_conditions != 0:
+            print(
+                f"Error in {epoch_name}: Total samples ({total_samples}) not divisible by # conditions ({n_conditions})."
+            )
+            continue
+
+        n_bins = int(total_samples / n_conditions)
+
+        trajs = X_embedded.reshape(n_conditions, n_bins, 3)
+
+        ax = fig.add_subplot(1, 3, i + 1, projection="3d")
+
+        for c in range(n_conditions):
+
+            ax.plot(
+                trajs[c, :, 0],
+                trajs[c, :, 1],
+                trajs[c, :, 2],
+                color=colors[c],
+                label=cond_names[c] if i == 0 else "",  # Legend only on first subplot
+                lw=2,
+                alpha=0.8,
+            )
+
+            ax.scatter(
+                trajs[c, 0, 0],
+                trajs[c, 0, 1],
+                trajs[c, 0, 2],
+                color=colors[c],
+                s=20,
+            )
+
+            ax.scatter(
+                trajs[c, -1, 0],
+                trajs[c, -1, 1],
+                trajs[c, -1, 2],
+                color=colors[c],
+                marker="x",
+                s=20,
+                alpha=0.6,
+            )
+
+        ax.set_title(epoch_name)
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_zlabel("PC3")
+        if i == 0:
+            ax.legend(loc="upper left", fontsize="x-small", frameon=False)
+
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
