@@ -60,12 +60,12 @@ def extract_baseline_pupil(trials_df, pupil_df, window=(-0.6, -0.1)):
     return trials_df
 
 
-def process_pupil_data(trials, pupil):
+def process_pupil_data(trials, pupil, window):
     """
     Wrapper to handle the Z-Scoring logic correctly.
     Crucial: Z-Score must be done PER MOUSE/SESSION, not globally.
     """
-    trials = extract_baseline_pupil(trials, pupil)
+    trials = extract_baseline_pupil(trials, pupil, window=window)
 
     vals = trials["pupil_baseline_raw"].values
 
@@ -77,7 +77,7 @@ def process_pupil_data(trials, pupil):
     return trials
 
 
-def create_global_df(eid_list):
+def create_global_df(eid_list, window=(-0.6, -0.1)):
 
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
@@ -90,11 +90,19 @@ def create_global_df(eid_list):
     for eid in tqdm(eid_list):
         try:
             sl = SessionLoader(one, eid)
-            trials, mask = load_trials_and_mask(one, eid)
+            trials, mask = load_trials_and_mask(
+                one, eid, exclude_unbiased=True, exclude_nochoice=True
+            )
             trials = trials[mask]
             sl.load_pupil()
-            trials = process_pupil_data(trials, sl.pupil)  # type: ignore
-            keep_columns = ["feedbackType", "probabilityLeft", "contrastRight", "contrastLeft"]
+            trials = process_pupil_data(trials, sl.pupil, window)  # type: ignore
+            keep_columns = [
+                "feedbackType",
+                "probabilityLeft",
+                "contrastRight",
+                "contrastLeft",
+                "pupil_z",
+            ]
             trials = trials[keep_columns]
             trials["eid"] = eid
             global_df.append(trials)
@@ -124,6 +132,9 @@ if __name__ == "__main__":
 
     list_of_eids = subset_df["eid"].unique()
 
-    df_all = create_global_df(list_of_eids)
+    df_all = create_global_df(list_of_eids, window=(-0.6, -0.1))
 
-    df_all.to_csv("./data/generated/pupil_stats.csv", index=False)
+    df_all.to_csv("./data/generated/pupil_stats_largerinterval.csv", index=False)
+
+    df_all = create_global_df(list_of_eids, window=(-0.6, -0.5))
+    df_all.to_csv("./data/generated/pupil_stats_smallerinterval.csv", index=False)
