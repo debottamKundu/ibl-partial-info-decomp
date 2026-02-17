@@ -93,7 +93,7 @@ def create_global_df(eid_list):
             trials, mask = load_trials_and_mask(one, eid)
             trials = trials[mask]
             sl.load_pupil()
-            trials = process_pupil_data(trials, sl.pupil_df)  # type: ignore
+            trials = process_pupil_data(trials, sl.pupil)  # type: ignore
             keep_columns = ["feedbackType", "probabilityLeft", "contrastRight", "contrastLeft"]
             trials = trials[keep_columns]
             trials["eid"] = eid
