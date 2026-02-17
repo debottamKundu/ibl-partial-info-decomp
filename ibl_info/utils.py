@@ -253,7 +253,9 @@ def compute_animal_stats(df, animal_id):
     """
     Computes stats for a single animal and adds an 'animal_id' column.
     """
-    # ... (Same logic as before) ...
+    if isinstance(df, dict):
+        df = pd.DataFrame(df)
+
     df = df.copy()
 
     # Preprocessing
