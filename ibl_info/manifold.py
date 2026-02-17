@@ -165,7 +165,9 @@ def process_single_session(
 
     try:
         spikes, clusters = load_good_units(one_local, pid)
-        trials, mask = load_trials_and_mask(one_local, eid)
+        trials, mask = load_trials_and_mask(
+            one_local, eid, exclude_unbiased=True, exclude_nochoice=True
+        )
         trials = {k: v[mask] for k, v in trials.items()}
 
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
@@ -522,49 +524,49 @@ if __name__ == "__main__":
     task_list = [(row["pid"], row["eid"]) for _, row in subset_df.iterrows()]
 
     list_of_eids = subset_df["eid"].unique()
-    df_all = compute_statistics(list_of_eids)
+    # df_all = compute_statistics(list_of_eids)
 
-    df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
-    # MAX_WORKERS = 8
-    # simple_mask = config["simple_mask"]
+    # df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
+    MAX_WORKERS = 8
+    simple_mask = config["simple_mask"]
 
-    # print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
-    # t0 = time.time()
+    print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
+    t0 = time.time()
 
-    # accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
+    accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
 
-    # with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-    #     futures = {
-    #         executor.submit(
-    #             process_single_session,
-    #             pid,
-    #             eid,
-    #             MY_REGIONS,
-    #             EPOCHS,
-    #             USE_SLIDING_WINDOW,
-    #             BIN_SIZE,
-    #             STRIDE,
-    #             BIN_SIZE,
-    #             difficulty=config["difficulty"],
-    #             simple_mask=simple_mask,
-    #         ): pid
-    #         for (pid, eid) in task_list
-    #     }
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(
+                process_single_session,
+                pid,
+                eid,
+                MY_REGIONS,
+                EPOCHS,
+                USE_SLIDING_WINDOW,
+                BIN_SIZE,
+                STRIDE,
+                BIN_SIZE,
+                difficulty=config["difficulty"],
+                simple_mask=simple_mask,
+            ): pid
+            for (pid, eid) in task_list
+        }
 
-    #     for i, future in enumerate(concurrent.futures.as_completed(futures)):
-    #         result = future.result()
-    #         if result:
-    #             for region, epoch_dict in result.items():
-    #                 for epoch_name, matrix in epoch_dict.items():
-    #                     # get all animals
-    #                     accumulated_data[region][epoch_name].append(matrix)
-    #         print(f"Progress: {i+1}/{len(task_list)}", end="\r")
+        for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            result = future.result()
+            if result:
+                for region, epoch_dict in result.items():
+                    for epoch_name, matrix in epoch_dict.items():
+                        # get all animals
+                        accumulated_data[region][epoch_name].append(matrix)
+            print(f"Progress: {i+1}/{len(task_list)}", end="\r")
 
-    # print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
+    print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    # save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
+    save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
 
-    # print(f"\nSaving data to {save_path}...")
-    # with open(save_path, "wb") as f:
-    #     pkl.dump(accumulated_data, f)
-    # print("Save complete.")
+    print(f"\nSaving data to {save_path}...")
+    with open(save_path, "wb") as f:
+        pkl.dump(accumulated_data, f)
+    print("Save complete.")
