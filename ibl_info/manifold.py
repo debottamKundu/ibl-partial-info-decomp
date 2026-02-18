@@ -10,7 +10,7 @@ from iblatlas.regions import BrainRegions
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from ibl_info.utils import check_config, compute_animal_stats
+from ibl_info.utils import check_config, compute_animal_stats, get_trial_masks_detailed
 from scipy.ndimage import convolve1d
 import traceback
 from scipy.stats import zscore
@@ -48,61 +48,6 @@ COND_NAMES = [
 # Base colors for the 4 types (Dark Blue, Light Blue, Dark Red, Light Red)
 # We will use Solid Lines for Correct, Dashed for Error
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
-
-
-def get_trial_masks_detailed(trials, split_difficulty=True, correct_only=True):
-    """
-    Returns boolean masks separating conditions by:
-    - Side (Left/Right)
-    - Congruence (Congruent/Incongruent)
-    - Difficulty (Hard/Easy) -> Optional
-    - Outcome (Correct) -> Optional filter
-    """
-    masks = {}
-
-    cL = trials["contrastLeft"].fillna(0)
-    cR = trials["contrastRight"].fillna(0)
-    trial_contrast = cL + cR
-
-    has_contrast_L = ~np.isnan(trials["contrastLeft"])
-    has_contrast_R = ~np.isnan(trials["contrastRight"])
-
-    is_L_block = trials["probabilityLeft"] == 0.8
-    is_R_block = trials["probabilityLeft"] == 0.2
-
-    if correct_only:
-        outcome_mask = trials["feedbackType"] == 1
-    else:
-        outcome_mask = np.ones(len(trials), dtype=bool)  # All trials
-
-    if split_difficulty:
-        is_easy = trial_contrast >= 0.25
-        is_hard = trial_contrast < 0.25
-        difficulties = {"Easy": is_easy, "Hard": is_hard}
-    else:
-        difficulties = {"All": np.ones(len(trials), dtype=bool)}
-
-    def add_mask(side_name, cong_name, diff_name, combined_mask):
-        key = f"{side_name}_{cong_name}_{diff_name}"
-        if correct_only:
-            key += "_Corr"
-        masks[key] = combined_mask & outcome_mask
-
-    for diff_name, diff_mask in difficulties.items():
-
-        # L-Cong (Stim L, Block L)
-        add_mask("L", "Cong", diff_name, has_contrast_L & is_L_block & diff_mask)
-
-        # R-Incong (Stim R, Block L)
-        add_mask("R", "Incong", diff_name, has_contrast_R & is_L_block & diff_mask)
-
-        # R-Cong (Stim R, Block R)
-        add_mask("R", "Cong", diff_name, has_contrast_R & is_R_block & diff_mask)
-
-        # L-Incong (Stim L, Block R)
-        add_mask("L", "Incong", diff_name, has_contrast_L & is_R_block & diff_mask)
-
-    return masks, list(masks.keys())
 
 
 def get_trial_masks(trials, simple=False):
@@ -148,8 +93,7 @@ def process_single_session(
     win_size,
     stride,
     bin_simple,
-    difficulty=False,
-    simple_mask=False,
+    difficulty=0,
 ):
     """
     Loads one session, extracts spikes, and computes PETHs for 8 conditions.
@@ -173,14 +117,33 @@ def process_single_session(
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
         # Get masks for all 8 conditions
-        if not difficulty:
-            masks = get_trial_masks(trials, simple_mask)
-        else:
-            masks, cond_names = get_trial_masks_detailed(trials)
+        if difficulty == 1:
+            masks = get_trial_masks(trials)
+        elif difficulty == 2:
+            masks, cond_names = get_trial_masks_detailed(
+                trials, split_congruence=True, correct_only=True
+            )
             COND_NAMES = cond_names
+        elif difficulty == 3:
+            masks, cond_names = get_trial_masks_detailed(
+                trials, split_congruence=False, correct_only=True
+            )
+            COND_NAMES = cond_names
+        elif difficulty == 4:
+            masks, cond_names = get_trial_masks_detailed(
+                trials, split_congruence=True, correct_only=False
+            )
+            COND_NAMES = cond_names
+        elif difficulty == 5:
+            masks, cond_names = get_trial_masks_detailed(
+                trials, split_congruence=False, correct_only=False
+            )
+            COND_NAMES = cond_names
+        else:
+            raise NotImplementedError
 
-        if simple_mask:
-            COND_NAMES = ["Left", "Right"]
+        # if simple_mask:
+        #     COND_NAMES = ["Left", "Right"]
 
         for cond in COND_NAMES:
             if np.sum(masks[cond]) < MIN_TRIALS:
@@ -489,6 +452,7 @@ def plot_pcas_separate_decomposition_adapted(accumulated_data, region, cond_name
 
 
 def compute_statistics(list_of_eids):
+
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         password="international",
@@ -503,6 +467,51 @@ def compute_statistics(list_of_eids):
         df_stat = compute_animal_stats(trials, eid)
         all_stats_list.append(df_stat)
     return pd.concat(all_stats_list, ignore_index=True)
+
+
+def run_parallel(task_list, difficulty):
+
+    MAX_WORKERS = 8
+
+    print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
+    t0 = time.time()
+
+    accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(
+                process_single_session,
+                pid,
+                eid,
+                MY_REGIONS,
+                EPOCHS,
+                USE_SLIDING_WINDOW,
+                BIN_SIZE,
+                STRIDE,
+                BIN_SIZE,
+                difficulty=difficulty,
+            ): pid
+            for (pid, eid) in task_list
+        }
+
+        for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            result = future.result()
+            if result:
+                for region, epoch_dict in result.items():
+                    for epoch_name, matrix in epoch_dict.items():
+                        # get all animals
+                        accumulated_data[region][epoch_name].append(matrix)
+            print(f"Progress: {i+1}/{len(task_list)}", end="\r")
+
+    print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
+
+    save_path = f"./data/generated/bwm_accumulated_data_correct_{difficulty}.pkl"
+
+    print(f"\nSaving data to {save_path}...")
+    with open(save_path, "wb") as f:
+        pkl.dump(accumulated_data, f)
+    print("Save complete.")
 
 
 if __name__ == "__main__":
@@ -527,46 +536,12 @@ if __name__ == "__main__":
     # df_all = compute_statistics(list_of_eids)
 
     # df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
-    MAX_WORKERS = 8
-    simple_mask = config["simple_mask"]
 
-    print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
-    t0 = time.time()
-
-    accumulated_data = {reg: {ep: [] for ep in EPOCHS} for reg in MY_REGIONS}
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {
-            executor.submit(
-                process_single_session,
-                pid,
-                eid,
-                MY_REGIONS,
-                EPOCHS,
-                USE_SLIDING_WINDOW,
-                BIN_SIZE,
-                STRIDE,
-                BIN_SIZE,
-                difficulty=config["difficulty"],
-                simple_mask=simple_mask,
-            ): pid
-            for (pid, eid) in task_list
-        }
-
-        for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            result = future.result()
-            if result:
-                for region, epoch_dict in result.items():
-                    for epoch_name, matrix in epoch_dict.items():
-                        # get all animals
-                        accumulated_data[region][epoch_name].append(matrix)
-            print(f"Progress: {i+1}/{len(task_list)}", end="\r")
-
-    print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
-
-    save_path = f"./data/generated/bwm_accumulated_data_correct_difficulty.pkl"
-
-    print(f"\nSaving data to {save_path}...")
-    with open(save_path, "wb") as f:
-        pkl.dump(accumulated_data, f)
-    print("Save complete.")
+    difficulty = 2
+    run_parallel(task_list, difficulty)
+    difficulty = 3
+    run_parallel(task_list, difficulty)
+    difficulty = 4
+    run_parallel(task_list, difficulty)
+    difficulty = 5
+    run_parallel(task_list, difficulty)

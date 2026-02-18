@@ -288,3 +288,60 @@ def compute_animal_stats(df, animal_id):
     stats.insert(0, "animal_id", animal_id)
 
     return stats
+
+
+def get_trial_masks_detailed(
+    trials, contrast_levels=[0, 0.0625, 0.125, 0.25, 1.0], split_congruence=True, correct_only=True
+):
+    """
+    Returns boolean masks separating conditions by:
+    - Side (Left/Right)
+    - Contrast Level (Exact values provided in list)
+    - Congruence (Optional: Congruent/Incongruent)
+    - Outcome (Optional: Correct only)
+    """
+    masks = {}
+
+    cL = trials["contrastLeft"].fillna(0)
+    cR = trials["contrastRight"].fillna(0)
+    trial_contrast = cL + cR
+
+    is_stim_L = ~np.isnan(trials["contrastLeft"])
+    is_stim_R = ~np.isnan(trials["contrastRight"])
+
+    if split_congruence:
+        is_block_L = trials["probabilityLeft"] == 0.8
+        is_block_R = trials["probabilityLeft"] == 0.2
+
+    if correct_only:
+        outcome_mask = trials["feedbackType"] == 1
+    else:
+        outcome_mask = np.ones(len(trials), dtype=bool)
+
+    for cont in contrast_levels:
+
+        is_current_contrast = np.isclose(trial_contrast, cont)
+        cont_str = str(cont).replace(".0", "") if cont == 0 else str(cont)
+
+        if split_congruence:
+            key = f"L_Cong_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_L & is_block_L & is_current_contrast & outcome_mask
+
+            key = f"L_Incong_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_L & is_block_R & is_current_contrast & outcome_mask
+
+            key = f"R_Cong_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_R & is_block_R & is_current_contrast & outcome_mask
+
+            key = f"R_Incong_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_R & is_block_L & is_current_contrast & outcome_mask
+
+        else:
+
+            key = f"L_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_L & is_current_contrast & outcome_mask
+
+            key = f"R_{cont_str}" + ("_Corr" if correct_only else "")
+            masks[key] = is_stim_R & is_current_contrast & outcome_mask
+
+    return masks, list(masks.keys())

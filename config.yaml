@@ -11,7 +11,7 @@ flexible_bounds: False
 #manifold
 use_sliding_window: False
 simple_mask: False
-difficulty: True
+difficulty: 2
 # general parameters
 n_bootstraps_decoding : 20
 discretize_decoding: 2
