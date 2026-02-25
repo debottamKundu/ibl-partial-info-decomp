@@ -49,7 +49,7 @@ def get_preceding_reward_history(trials, masks, n=1):
     return results
 
 
-def process_session(eid, one, only_correct=True):
+def process_session(eid, one, only_correct=True, simpler_mask=False):
     """Function containing the logic for a single session."""
     try:
         trials, trial_mask = load_trials_and_mask(
@@ -57,9 +57,13 @@ def process_session(eid, one, only_correct=True):
         )
 
         trials = trials[trial_mask]
-        cond_masks, cond_names = get_action_kernel_congruence(
-            eid, trial_mask, only_corr=only_correct
-        )
+
+        if simpler_mask:
+            cond_masks, cond_names = get_trial_masks(trials)
+        else:
+            cond_masks, cond_names = get_action_kernel_congruence(
+                eid, trial_mask, only_corr=only_correct
+            )
 
         condition_averages = get_preceding_reward_history(trials, cond_masks, n=1)
 
@@ -128,5 +132,22 @@ if __name__ == "__main__":
 
     with open(
         "./data/processed/all_eids_dict_for_preceding_reward_history_all_conditions.pkl", "wb"
+    ) as f:
+        pkl.dump(big_dict, f)
+
+    # i also want to use the old function
+
+    # use simpler mask
+    only_correct = True
+    use_simpler = True
+
+    results_list = Parallel(n_jobs=-1)(
+        delayed(process_session)(eid, one, only_correct, use_simpler) for eid in global_eid_list
+    )
+
+    big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
+
+    with open(
+        "./data/processed/all_eids_dict_for_preceding_reward_history_older_conditions.pkl", "wb"
     ) as f:
         pkl.dump(big_dict, f)
