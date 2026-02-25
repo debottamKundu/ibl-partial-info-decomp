@@ -78,7 +78,7 @@ def generate_pseudosession_multiple(one, eid, n_permutations=100):
 def generate_pseudosession_with_choice(one, eid, choice=False):
 
     trials, mask = load_trials_and_mask(
-        one, eid, exclude_nochoice=True, exclude_unbiased=True
+        one, eid, exclude_nochoice=True, exclude_unbiased=False
     )  # to keep same statistics
     trials = trials[mask]
     pseudosess = generate_pseudo_session(trials, generate_choices=False)
@@ -112,7 +112,7 @@ def generate_pseudosession_with_choice(one, eid, choice=False):
 
 def fit_eid(one, eid):
 
-    trials, mask = load_trials_and_mask(one, eid, exclude_nochoice=False, exclude_unbiased=False)
+    trials, mask = load_trials_and_mask(one, eid, exclude_nochoice=True, exclude_unbiased=False)
     trials = trials[mask]
     metadata = {"subject": eid, "eid": eid, "probe_name": "probe00"}
 
@@ -124,6 +124,16 @@ def fit_eid(one, eid):
         single_zeta=True,
     )
     model.load_or_train(remove_old=False, adaptive=True)
+
+    # fit and return trials maybe:
+
+    df_prior = model.predict_trials()
+    df_trials = trials.join(df_prior, how="left")
+
+    trials, mask = load_trials_and_mask(one, eid, exclude_nochoice=True, exclude_unbiased=True)
+    df_trials = df_trials[mask]
+
+    return df_trials
 
 
 def fit_all_animals(important_regions):

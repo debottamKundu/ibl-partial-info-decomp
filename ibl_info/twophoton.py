@@ -34,7 +34,7 @@ animalsofinterest = np.intersect1d(trained_subjects, training_subjects)
 
 for subject in tqdm(animalsofinterest, desc="subject"):
 
-    if os.path.exists(f"../data/processed/{subject}.pkl"):
+    if os.path.exists(f"./data/processed/{subject}.pkl"):
         continue
 
     global_perf = []
@@ -59,5 +59,5 @@ for subject in tqdm(animalsofinterest, desc="subject"):
         "probabilities": global_probability,
         "protocol": sess_details,
     }
-    with open(f"../data/processed/{subject}.pkl", "wb") as f:
+    with open(f"./data/processed/{subject}.pkl", "wb") as f:
         pkl.dump(temp_pickle, f)

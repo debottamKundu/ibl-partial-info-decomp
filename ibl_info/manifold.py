@@ -14,6 +14,7 @@ from ibl_info.utils import check_config, compute_animal_stats, get_trial_masks_d
 from scipy.ndimage import convolve1d
 import traceback
 from scipy.stats import zscore
+from ibl_info.pseudosession import fit_eid
 
 config = check_config()
 MY_REGIONS = config["stim_prior_regions"]
@@ -50,18 +51,27 @@ COND_NAMES = [
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
+def get_action_kernel_congruence(one, eid):
+
+    trials = fit_eid(one, eid)
+
+    # binarize prior
+    
+
+
 def get_trial_masks(trials, simple=False):
     """
     Returns boolean masks for 8 conditions (Correct & Error).
     """
     masks = {}
 
+    true_prior = config['true_prior']
+    if true_prior:
+        is_L_block = trials["probabilityLeft"] == 0.8
+        is_R_block = trials["probabilityLeft"] == 0.2
+    
     has_contrast_L = ~np.isnan(trials["contrastLeft"])
     has_contrast_R = ~np.isnan(trials["contrastRight"])
-
-    is_L_block = trials["probabilityLeft"] == 0.8
-    is_R_block = trials["probabilityLeft"] == 0.2
-
     is_correct = trials["feedbackType"] == 1
     is_error = trials["feedbackType"] == -1
 
@@ -78,10 +88,10 @@ def get_trial_masks(trials, simple=False):
     masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
 
     if simple:
-        masks["Left"] = has_contrast_L & is_correct
-        masks["Right"] = has_contrast_R & is_correct
+        # we return only correct trials
+        masks = {k: v for k, v in masks.items() if "Corr" in k}
 
-    return masks
+    return masks, list(masks.keys())
 
 
 def process_single_session(
@@ -117,31 +127,29 @@ def process_single_session(
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
         # Get masks for all 8 conditions
-        if difficulty == 1:
-            masks = get_trial_masks(trials)
+        if difficulty == 0:
+            masks, cond_names = get_trial_masks(trials, simple=True)
+        elif difficulty == 1:
+            masks, cond_names = get_trial_masks(trials)
         elif difficulty == 2:
             masks, cond_names = get_trial_masks_detailed(
                 trials, split_congruence=True, correct_only=True
             )
-            COND_NAMES = cond_names
         elif difficulty == 3:
             masks, cond_names = get_trial_masks_detailed(
                 trials, split_congruence=False, correct_only=True
             )
-            COND_NAMES = cond_names
         elif difficulty == 4:
             masks, cond_names = get_trial_masks_detailed(
                 trials, split_congruence=True, correct_only=False
             )
-            COND_NAMES = cond_names
         elif difficulty == 5:
             masks, cond_names = get_trial_masks_detailed(
                 trials, split_congruence=False, correct_only=False
             )
-            COND_NAMES = cond_names
         else:
             raise NotImplementedError
-
+        COND_NAMES = cond_names
         # if simple_mask:
         #     COND_NAMES = ["Left", "Right"]
 
@@ -537,11 +545,5 @@ if __name__ == "__main__":
 
     # df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
 
-    difficulty = 2
-    run_parallel(task_list, difficulty)
-    difficulty = 3
-    run_parallel(task_list, difficulty)
-    difficulty = 4
-    run_parallel(task_list, difficulty)
-    difficulty = 5
+    difficulty = 0
     run_parallel(task_list, difficulty)
