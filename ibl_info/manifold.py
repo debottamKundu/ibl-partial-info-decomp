@@ -50,13 +50,42 @@ COND_NAMES = [
 # We will use Solid Lines for Correct, Dashed for Error
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
+with open("./data/processed/all_eids_dict.pkl", "rb") as f:
+    all_eids_dict = pkl.load(f)
 
-def get_action_kernel_congruence(one, eid):
 
-    trials = fit_eid(one, eid)
+def get_action_kernel_congruence(eid, trial_mask, only_corr=True):
 
-    # binarize prior
-    
+    trials_with_prior = all_eids_dict[eid]
+
+    # binarize prior, it track left probability.
+    trials = trials_with_prior[trial_mask]
+    expects_L = trials["prior"] > 0.5
+    expects_R = trials["prior"] < 0.5
+
+    # we get all 8 conditions
+    has_contrast_L = ~np.isnan(trials["contrastLeft"])
+    has_contrast_R = ~np.isnan(trials["contrastRight"])
+    is_correct = trials["feedbackType"] == 1
+    is_error = trials["feedbackType"] == -1
+
+    masks = {}
+
+    masks["L_Cong_Corr"] = has_contrast_L & expects_L & is_correct
+    masks["L_Cong_Err"] = has_contrast_L & expects_L & is_error
+    masks["R_Incong_Corr"] = has_contrast_R & expects_L & is_correct
+    masks["R_Incong_Err"] = has_contrast_R & expects_L & is_error
+
+    # Right Block Conditions
+    masks["R_Cong_Corr"] = has_contrast_R & expects_R & is_correct
+    masks["R_Cong_Err"] = has_contrast_R & expects_R & is_error
+    masks["L_Incong_Corr"] = has_contrast_L & expects_R & is_correct
+    masks["L_Incong_Err"] = has_contrast_L & expects_R & is_error
+
+    if only_corr:
+        masks = {k: v for k, v in masks.items() if "Corr" in k}
+
+    return masks, list(masks.keys())
 
 
 def get_trial_masks(trials, simple=False):
@@ -65,11 +94,9 @@ def get_trial_masks(trials, simple=False):
     """
     masks = {}
 
-    true_prior = config['true_prior']
-    if true_prior:
-        is_L_block = trials["probabilityLeft"] == 0.8
-        is_R_block = trials["probabilityLeft"] == 0.2
-    
+    is_L_block = trials["probabilityLeft"] == 0.8
+    is_R_block = trials["probabilityLeft"] == 0.2
+
     has_contrast_L = ~np.isnan(trials["contrastLeft"])
     has_contrast_R = ~np.isnan(trials["contrastRight"])
     is_correct = trials["feedbackType"] == 1
@@ -119,10 +146,10 @@ def process_single_session(
 
     try:
         spikes, clusters = load_good_units(one_local, pid)
-        trials, mask = load_trials_and_mask(
+        trials, trial_mask = load_trials_and_mask(
             one_local, eid, exclude_unbiased=True, exclude_nochoice=True
         )
-        trials = {k: v[mask] for k, v in trials.items()}
+        trials = {k: v[trial_mask] for k, v in trials.items()}
 
         all_spike_ids = clusters["cluster_id"][spikes["clusters"]]
 
@@ -147,6 +174,10 @@ def process_single_session(
             masks, cond_names = get_trial_masks_detailed(
                 trials, split_congruence=False, correct_only=False
             )
+        elif difficulty == 6:
+            masks, cond_names = get_action_kernel_congruence(eid, trial_mask)
+        elif difficulty == 7:
+            masks, cond_names = get_action_kernel_congruence(eid, trial_mask, only_corr=False)
         else:
             raise NotImplementedError
         COND_NAMES = cond_names
@@ -479,7 +510,7 @@ def compute_statistics(list_of_eids):
 
 def run_parallel(task_list, difficulty):
 
-    MAX_WORKERS = 8
+    MAX_WORKERS = -1
 
     print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
     t0 = time.time()
@@ -545,5 +576,8 @@ if __name__ == "__main__":
 
     # df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
 
-    difficulty = 0
+    difficulty = 6
+    run_parallel(task_list, difficulty)
+
+    difficulty = 7
     run_parallel(task_list, difficulty)
