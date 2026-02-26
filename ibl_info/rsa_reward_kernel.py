@@ -65,7 +65,7 @@ def process_session(eid, one, only_correct=True, simpler_mask=False):
                 eid, trial_mask, only_corr=only_correct
             )
 
-        condition_averages = get_preceding_reward_history(trials, cond_masks, n=1)
+        condition_averages = get_preceding_reward_history(trials, cond_masks, n=5)
 
         return (eid, condition_averages)
 
@@ -111,29 +111,29 @@ if __name__ == "__main__":
     )
     global_eid_list = get_requisite_eids(one, important_regions)
 
-    only_correct = True
-    results_list = Parallel(n_jobs=-1)(
-        delayed(process_session)(eid, one, only_correct) for eid in global_eid_list
-    )
+    # only_correct = True
+    # results_list = Parallel(n_jobs=-1)(
+    #     delayed(process_session)(eid, one, only_correct) for eid in global_eid_list
+    # )
 
-    big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
+    # big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
 
-    with open(
-        "./data/processed/all_eids_dict_for_preceding_reward_history_correct.pkl", "wb"
-    ) as f:
-        pkl.dump(big_dict, f)
+    # with open(
+    #     "./data/processed/all_eids_dict_for_preceding_reward_history_correct.pkl", "wb"
+    # ) as f:
+    #     pkl.dump(big_dict, f)
 
-    only_correct = False
-    results_list = Parallel(n_jobs=-1)(
-        delayed(process_session)(eid, one, only_correct) for eid in global_eid_list
-    )
+    # only_correct = False
+    # results_list = Parallel(n_jobs=-1)(
+    #     delayed(process_session)(eid, one, only_correct) for eid in global_eid_list
+    # )
 
-    big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
+    # big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
 
-    with open(
-        "./data/processed/all_eids_dict_for_preceding_reward_history_all_conditions.pkl", "wb"
-    ) as f:
-        pkl.dump(big_dict, f)
+    # with open(
+    #     "./data/processed/all_eids_dict_for_preceding_reward_history_all_conditions.pkl", "wb"
+    # ) as f:
+    #     pkl.dump(big_dict, f)
 
     # i also want to use the old function
 

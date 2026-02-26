@@ -50,11 +50,11 @@ COND_NAMES = [
 # We will use Solid Lines for Correct, Dashed for Error
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
-with open("./data/processed/all_eids_dict.pkl", "rb") as f:
-    all_eids_dict = pkl.load(f)
-
 
 def get_action_kernel_congruence(eid, trial_mask, only_corr=True):
+
+    with open("./data/processed/all_eids_dict.pkl", "rb") as f:
+        all_eids_dict = pkl.load(f)
 
     trials_with_prior = all_eids_dict[eid]
 

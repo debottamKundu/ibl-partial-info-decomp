@@ -15,12 +15,12 @@ def ideal_rsa_matrices():
     Indices (8 conditions):
     0: L_Cong_Corr  (Stim L, Block L, Move L)
     1: L_Cong_Err   (Stim L, Block L, Move R)
-    2: L_Inc_Corr   (Stim L, Block R, Move L)
-    3: L_Inc_Err    (Stim L, Block R, Move R)
+    2: L_Incong_Corr   (Stim L, Block R, Move L)
+    3: L_Incong_Err    (Stim L, Block R, Move R)
     4: R_Cong_Corr  (Stim R, Block R, Move R)
     5: R_Cong_Err   (Stim R, Block R, Move L)
-    6: R_Inc_Corr   (Stim R, Block L, Move R)
-    7: R_Inc_Err    (Stim R, Block L, Move L)
+    6: R_Incong_Corr   (Stim R, Block L, Move R)
+    7: R_Incong_Err    (Stim R, Block L, Move L)
     """
 
     # 1. Initialize empty matrices
@@ -29,7 +29,7 @@ def ideal_rsa_matrices():
         "Choice": np.zeros((n_conds, n_conds)),
         "Prior": np.zeros((n_conds, n_conds)),
         "Congruence": np.zeros((n_conds, n_conds)),
-        "Outcome": np.zeros((n_conds, n_conds)),
+        # "Outcome": np.zeros((n_conds, n_conds)),
         "Stimulus": np.zeros((n_conds, n_conds)),
     }
 
@@ -59,8 +59,8 @@ def ideal_rsa_matrices():
                 models["Prior"][r, c] = 1
 
             # Outcome Model
-            if (r in idx_corr) != (c in idx_corr):
-                models["Outcome"][r, c] = 1
+            # if (r in idx_corr) != (c in idx_corr):
+            #     models["Outcome"][r, c] = 1
 
             # Stimulus Model
             if (r in idx_stim_L) != (c in idx_stim_L):
@@ -358,3 +358,142 @@ def plot_rsa_summary_bars(results, model_names):
     sns.despine()
     plt.tight_layout()
     plt.show()
+
+    return df
+
+
+import numpy as np
+from scipy.spatial.distance import pdist
+from scipy.stats import zscore
+from sklearn.linear_model import LinearRegression, RidgeCV, LassoCV
+
+
+def run_rsa_regression_with_reward(
+    accumulated_data,
+    model_vectors=None,
+    model_names=None,
+    normalization=False,
+    model_type=None,
+    conditions=8,
+    reward_dict=None,
+    condition_keys=None,
+):
+
+    if model_vectors is None:
+        model_vectors, model_names, _ = ideal_rsa_matrices()
+
+    X_base = np.column_stack([model_vectors[name] for name in model_names])  # type: ignore
+
+    results = {}
+
+    if reward_dict is not None and condition_keys is not None:
+        global_rewards = np.zeros(conditions)
+        all_animals = list(reward_dict.keys())
+
+        for i, cond in enumerate(condition_keys):
+            vals = [
+                reward_dict[anim][cond]["avg_number_of_correct_preceding_n"]
+                for anim in all_animals
+                if anim in reward_dict and cond in reward_dict[anim]
+            ]
+            global_rewards[i] = np.nanmean(vals) if vals else 0
+
+        global_reward_rdm = pdist(global_rewards.reshape(-1, 1), metric="euclidean")
+    else:
+        global_reward_rdm = np.zeros((conditions, conditions))
+
+    for region in accumulated_data.keys():
+        print(f"Processing {region}...")
+        results[region] = {}
+
+        X_region = X_base.copy()
+        current_model_names = list(model_names)  # type: ignore
+
+        # if reward_dict is not None and region_animals is not None and condition_keys is not None:
+
+        #     animals_in_region = region_animals.get(region, [])
+
+        #     region_rewards = np.zeros(conditions)
+        #     for i, cond in enumerate(condition_keys):
+
+        #         vals = [
+        #             reward_dict[anim][cond]["avg_number_of_correct_preceding_n"]
+        #             for anim in animals_in_region
+        #             if anim in reward_dict and cond in reward_dict[anim]
+        #         ]
+
+        #         # region_rewards[i] = np.nanmean(vals) if vals else 0
+        #         if not vals:
+        #             print(f"  WARNING: No data for {cond} in {region}!")
+
+        #         region_rewards[i] = (
+        #             np.nanmean(vals) if vals else np.nan
+        #         )  # Use NaN instead of 0 to spot it
+
+        #     print(
+        #         f"Region: {region} | N animals: {len(animals_in_region)} | Rewards: {np.round(region_rewards, 2)}"
+        #     )
+
+        #     reward_rdm = pdist(region_rewards.reshape(-1, 1), metric="euclidean")
+
+        X_region = np.column_stack((X_region, global_reward_rdm))
+        current_model_names.append("Previous-Outcome")
+
+        X_region = zscore(X_region, axis=0)
+        # X_region_standardized = np.nan_to_num(
+        #     X_region_standardized
+        # )  # Catch constant vectors if any
+
+        epochs = ["Quiescent", "Stimulus", "Choice"]
+
+        for epoch in epochs:
+            session_matrices = accumulated_data[region][epoch]
+            if not session_matrices:
+                continue
+
+            pop_matrix = np.vstack(session_matrices)
+
+            if normalization:
+                pop_matrix = zscore(pop_matrix, axis=1)
+                pop_matrix = np.nan_to_num(pop_matrix)  # fixed variable name here
+
+            n_bins = int(pop_matrix.shape[1] / conditions)
+            reshaped = np.transpose(
+                pop_matrix.reshape(pop_matrix.shape[0], conditions, n_bins), (1, 2, 0)
+            )
+
+            # Initialize betas array using the updated number of models
+            betas_over_time = np.zeros((n_bins, len(current_model_names)))
+            r2_scores = np.zeros(n_bins)
+
+            if model_type == "Lasso":
+                reg = LassoCV(cv=5, fit_intercept=True, positive=True)
+            elif model_type == "Ridge":
+                reg = RidgeCV(alphas=[0.1, 1.0, 10.0], fit_intercept=True)
+            elif model_type == "NNLS":
+                reg = LinearRegression(fit_intercept=True, positive=True)
+            else:
+                reg = LinearRegression(fit_intercept=True)
+
+            for t in range(n_bins):
+                trajectories = reshaped[:, t, :]
+
+                y = pdist(trajectories, "euclidean")
+
+                try:
+                    # Fit using the Region-Specific X matrix
+                    reg.fit(X_region, y)
+                    betas_over_time[t, :] = reg.coef_
+                    r2_scores[t] = reg.score(X_region, y)
+                except Exception as e:
+                    betas_over_time[t, :] = 0
+                    r2_scores[t] = 0
+
+            results[region][epoch] = {
+                "betas": betas_over_time,
+                "r2": r2_scores,
+                "model_names": current_model_names,
+                "zscored_xregion": X_region,
+            }
+
+    return results
