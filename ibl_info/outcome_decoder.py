@@ -196,7 +196,7 @@ def run_feedback_decoder(session_id, region, epoch):
 
     binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
         spikes, clusters, intervals, [region], minimum_units=config["min_units_decoding"]
-    )  # this returns all neurons from a single region that pass qc
+    )
 
     if len(binned_spikes) == 0:
         print(f'Neurons less than {config["min_units_decoding"]} in {region}')
@@ -205,7 +205,10 @@ def run_feedback_decoder(session_id, region, epoch):
     spike_data = binned_spikes[0]
     # target_variable[target_variable == -1] = 0
 
-    results = run_nested_decoder(spike_data, target_variable, cv_splits=3)
+    outer_cv_rule = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+    outer_cv_splits = list(outer_cv_rule.split(spike_data, target_variable))
+
+    results = run_nested_decoder(spike_data, target_variable, cv_splits=outer_cv_splits)
 
     return results
 
