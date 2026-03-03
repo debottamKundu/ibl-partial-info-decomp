@@ -54,139 +54,106 @@ from ibl_info.prepare_data_pid import (
     get_new_cinc_intervals_choice,
 )
 from ibl_info.utils import check_config, equispaced_binning, equipopulated_binning
-
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import (
+    GridSearchCV,
+    StratifiedKFold,
+    cross_val_score,
+    permutation_test_score,
+)
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 config = check_config()
 
 
-import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, balanced_accuracy_score
-
-
-def run_decoder_nested_cv(
-    neural_data,
-    trial_labels,
-    n_splits=5,
-    scale=False,
-    param_grid=None,
-):
+def run_nested_decoder(X, y, cv_splits, n_permutations=50, random_state=42):
     """
-    Runs linear decoders using Nested Cross-Validation (No Bootstrapping).
+    Runs a 2-step (nested) cross-validation logistic regression decoder.
 
-    1. Outer Loop: Splits data into Train/Test (k-fold).
-    2. Inner Loop: Optimizes hyperparameters (C) on Train data via GridSearchCV.
-    3. Refit: Trains best model on the specific fold's Train data.
-    4. Predict: Evaluates on the specific fold's Test data.
+    Parameters:
+    -----------
+    X : array-like of shape (n_trials, n_neurons)
+        The neural spiking data.
+    y : array-like of shape (n_trials,)
+        The feedback labels (-1, 1).
+    cv_splits : list of tuples or scikit-learn CV generator
+        The outer cross-validation splits. e.g., list(StratifiedKFold(5).split(X, y))
+    n_permutations : int
+        Number of shuffles for the null distribution.
 
     Returns:
-        dict: A dictionary containing overall metrics, predictions, and selected parameters.
+    --------
+    results : dict
+        Contains 'fold_scores', 'mean_score', 'null_distribution', and 'p_value'.
     """
+    cv_splits = list(cv_splits)
 
-    # 1. Setup Defaults
-    if param_grid is None:
-        param_grid = {"clf__C": [0.01, 0.1, 1, 10]}
+    pipeline = Pipeline(
+        [
+            ("scaler", StandardScaler()),
+            (
+                "logreg",
+                LogisticRegression(
+                    class_weight="balanced",
+                    solver="liblinear",
+                    max_iter=1000,
+                    random_state=random_state,
+                ),
+            ),
+        ]
+    )
 
-    X = neural_data
-    y = np.array(trial_labels).flatten()
-    n_trials, n_neurons = X.shape
-    n_classes = len(np.unique(y))
-
-    probs_all = np.zeros((n_trials, n_classes))
-
-    best_params_per_fold = []
-
-    print(f"Starting Nested CV (Outer Splits: {n_splits})...")
-
-    outer_cv = StratifiedKFold(n_splits=n_splits, shuffle=True)
-
-    for fold_idx, (train_idx, test_idx) in enumerate(outer_cv.split(X, y)):
-
-        X_train, X_test = X[train_idx], X[test_idx]
-        y_train = y[train_idx]
-
-        train_weights = compute_sample_weight("balanced", y=y_train)
-
-        steps = [("clf", LogisticRegression(solver="liblinear", max_iter=1000))]
-
-        if scale:
-
-            steps.insert(0, ("scaler", StandardScaler()))  # type: ignore
-
-        pipeline = Pipeline(steps)
-
-        grid = GridSearchCV(pipeline, param_grid, cv=5, scoring="balanced_accuracy", n_jobs=-1)
-
-        grid.fit(X_train, y_train, clf__sample_weight=train_weights)
-
-        best_params_per_fold.append(grid.best_params_["clf__C"])
-
-        probs_all[test_idx] = grid.predict_proba(X_test)
-
-    preds_all = np.argmax(probs_all, axis=1)
-
-    results = {
-        "predictions": preds_all,
-        "targets": y,
-        "best_params": best_params_per_fold,
-        "accuracy": accuracy_score(y, preds_all),
-        "balanced_accuracy": balanced_accuracy_score(y, preds_all),
+    param_grid = {
+        "logreg__penalty": ["l1", "l2"],
+        "logreg__C": [0.001, 0.01, 0.1, 1.0, 10.0],
     }
 
-    return results
+    inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=random_state)
 
-
-def gather_data(session_id, region):
-
-    one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        password="international",
-        silent=True,
-        username="intbrainlab",
+    clf_tuned = GridSearchCV(
+        estimator=pipeline,
+        param_grid=param_grid,
+        cv=inner_cv,
+        scoring="balanced_accuracy",
+        n_jobs=-1,
     )
-    pids, probes = one.eid2pid(session_id)
-    if isinstance(probes, list) and len(probes) > 1:
-        to_merge = [load_good_units(one, pid=pid, qc=1) for pid in pids]
-        spikes, clusters = merge_probes(
-            [spikes for spikes, _ in to_merge], [clusters for _, clusters in to_merge]
-        )
-    else:
-        spikes, clusters = load_good_units(one, pid=pids[0], qc=1)
 
-    trials, mask = load_trials_and_mask(
-        one, session_id, exclude_nochoice=True, exclude_unbiased=True
+    print("Evaluating true model across outer folds...")
+    fold_scores = cross_val_score(
+        estimator=clf_tuned,
+        X=X,
+        y=y,
+        cv=cv_splits,
+        scoring="balanced_accuracy",
+        n_jobs=-1,
     )
-    trials = trials[mask]
+    mean_score = np.mean(fold_scores)
+    print(f"True Mean Balanced Accuracy: {mean_score:.3f}")
 
-    # trials-feedback is the target
-    target_variable = trials["feedbackType"]
+    print(
+        f"Running permutation test with {n_permutations} shuffles (this may take a few minutes)..."
+    )
 
-    # "Quiescent": {
-    #     "align": "stimOn_times",
-    #     "offset": -0.1,  # Align to -0.1s before Stim
-    #     "t_pre": 0.5,
-    #     "t_post": 0.0,
-    # }
+    _, null_distribution, p_value = permutation_test_score(
+        estimator=clf_tuned,
+        X=X,
+        y=y,
+        cv=cv_splits,
+        scoring="balanced_accuracy",
+        n_permutations=n_permutations,
+        n_jobs=-1,
+        random_state=random_state,
+    )
+    print(f"Mean Null Balanced Accuracy: {np.mean(null_distribution):.3f} (p = {p_value:.4f})")
 
-    stimon_times = trials.stimOn_times.values
-    qu_time_on = stimon_times - 0.5
-    qu_time_off = stimon_times - 0.1
-    intervals = np.array([qu_time_on, qu_time_off]).T
-
-    binned_spikes, actual_regions, n_units, cluster_uuids_list = prepare_ephys_data(
-        spikes, clusters, intervals, [region], minimum_units=config["min_units_decoding"]
-    )  # this returns all neurons from a single region that pass qc
-
-    if len(binned_spikes) == 0:
-        print(f'Neurons less than {config["min_units_decoding"]} in {region}')
-        return {}
-
-    spike_data = binned_spikes[0]
-    target_variable[target_variable == -1] = 0
-
-    return spike_data, target_variable
+    return {
+        "fold_scores": fold_scores,
+        "mean_score": mean_score,
+        "null_distribution": null_distribution,
+        "p_value": p_value,
+    }
 
 
 def run_feedback_decoder(session_id, region, epoch):
@@ -236,39 +203,11 @@ def run_feedback_decoder(session_id, region, epoch):
         return {}
 
     spike_data = binned_spikes[0]
-    target_variable[target_variable == -1] = 0
+    # target_variable[target_variable == -1] = 0
 
-    results = run_decoder_nested_cv(
-        spike_data,
-        target_variable,
-        n_splits=5,
-        scale=False,
-    )
+    results = run_nested_decoder(spike_data, target_variable, cv_splits=3)
 
-    null_scores = []
-    y_shuffled = np.array(target_variable).copy().flatten()
-    n_permutations = config["permutations"]
-    print(f"Starting {n_permutations} permutations...")
-
-    for i in range(n_permutations):
-        print(f"  Permutation {i + 1}/{n_permutations}...")
-
-        # SHUFFLE: Destroy the relationship between X and y
-        np.random.shuffle(y_shuffled)
-
-        # Run decoder on shuffled labels
-        # Note: We pass neural_data unchanged, but y is shuffled
-        perm_results = run_decoder_nested_cv(spike_data, y_shuffled)
-
-        null_scores.append(perm_results["balanced_accuracy"])
-
-    null_scores = np.array(null_scores)
-
-    result_pickle = {
-        "results": results,
-        "null_scores": null_scores,
-    }
-    return result_pickle
+    return results
 
 
 def prepare_and_run_data(args):
@@ -318,7 +257,9 @@ def run_flattened(list_of_regions, epoch):
 
     # this will make one huge pickle:
     for region, region_pickle in region_data.items():
-        with open(f"./data/generated/selective_{region}_{epoch}_feedback_decoder.pkl", "wb") as f:
+        with open(
+            f"./data/generated/selective_{region}_{epoch}_feedback_decoder_new.pkl", "wb"
+        ) as f:
             pkl.dump(region_pickle, f)
 
     print("Done!")
