@@ -10,7 +10,14 @@ from iblatlas.regions import BrainRegions
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from ibl_info.utils import check_config, compute_animal_stats, get_trial_masks_detailed
+from ibl_info.utils import (
+    check_config,
+    compute_animal_stats,
+    get_action_kernel_congruence,
+    get_trial_masks,
+    get_trial_masks_detailed,
+    action_kernel_and_previous_feedback,
+)
 from scipy.ndimage import convolve1d
 import traceback
 from scipy.stats import zscore
@@ -51,76 +58,6 @@ COND_NAMES = [
 BASE_COLORS = ["#00008B", "#6495ED", "#8B0000", "#FA8072"]
 
 
-def get_action_kernel_congruence(eid, trial_mask, only_corr=True):
-
-    with open("./data/processed/all_eids_dict.pkl", "rb") as f:
-        all_eids_dict = pkl.load(f)
-
-    trials_with_prior = all_eids_dict[eid]
-
-    # binarize prior, it track left probability.
-    trials = trials_with_prior[trial_mask]
-    expects_L = trials["prior"] > 0.5
-    expects_R = trials["prior"] < 0.5
-
-    # we get all 8 conditions
-    has_contrast_L = ~np.isnan(trials["contrastLeft"])
-    has_contrast_R = ~np.isnan(trials["contrastRight"])
-    is_correct = trials["feedbackType"] == 1
-    is_error = trials["feedbackType"] == -1
-
-    masks = {}
-
-    masks["L_Cong_Corr"] = has_contrast_L & expects_L & is_correct
-    masks["L_Cong_Err"] = has_contrast_L & expects_L & is_error
-    masks["R_Incong_Corr"] = has_contrast_R & expects_L & is_correct
-    masks["R_Incong_Err"] = has_contrast_R & expects_L & is_error
-
-    # Right Block Conditions
-    masks["R_Cong_Corr"] = has_contrast_R & expects_R & is_correct
-    masks["R_Cong_Err"] = has_contrast_R & expects_R & is_error
-    masks["L_Incong_Corr"] = has_contrast_L & expects_R & is_correct
-    masks["L_Incong_Err"] = has_contrast_L & expects_R & is_error
-
-    if only_corr:
-        masks = {k: v for k, v in masks.items() if "Corr" in k}
-
-    return masks, list(masks.keys())
-
-
-def get_trial_masks(trials, simple=False):
-    """
-    Returns boolean masks for 8 conditions (Correct & Error).
-    """
-    masks = {}
-
-    is_L_block = trials["probabilityLeft"] == 0.8
-    is_R_block = trials["probabilityLeft"] == 0.2
-
-    has_contrast_L = ~np.isnan(trials["contrastLeft"])
-    has_contrast_R = ~np.isnan(trials["contrastRight"])
-    is_correct = trials["feedbackType"] == 1
-    is_error = trials["feedbackType"] == -1
-
-    # Left Block Conditions
-    masks["L_Cong_Corr"] = has_contrast_L & is_L_block & is_correct
-    masks["L_Cong_Err"] = has_contrast_L & is_L_block & is_error
-    masks["R_Incong_Corr"] = has_contrast_R & is_L_block & is_correct
-    masks["R_Incong_Err"] = has_contrast_R & is_L_block & is_error
-
-    # Right Block Conditions
-    masks["R_Cong_Corr"] = has_contrast_R & is_R_block & is_correct
-    masks["R_Cong_Err"] = has_contrast_R & is_R_block & is_error
-    masks["L_Incong_Corr"] = has_contrast_L & is_R_block & is_correct
-    masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
-
-    if simple:
-        # we return only correct trials
-        masks = {k: v for k, v in masks.items() if "Corr" in k}
-
-    return masks, list(masks.keys())
-
-
 def process_single_session(
     pid,
     eid,
@@ -159,20 +96,16 @@ def process_single_session(
         elif difficulty == 1:
             masks, cond_names = get_trial_masks(trials)
         elif difficulty == 2:
-            masks, cond_names = get_trial_masks_detailed(
-                trials, split_congruence=True, correct_only=True
+            masks, cond_names = action_kernel_and_previous_feedback(
+                eid, trial_mask, only_corr=True
             )
         elif difficulty == 3:
-            masks, cond_names = get_trial_masks_detailed(
-                trials, split_congruence=False, correct_only=True
+            masks, cond_names = action_kernel_and_previous_feedback(
+                eid, trial_mask, only_corr=False
             )
         elif difficulty == 4:
-            masks, cond_names = get_trial_masks_detailed(
-                trials, split_congruence=True, correct_only=False
-            )
-        elif difficulty == 5:
-            masks, cond_names = get_trial_masks_detailed(
-                trials, split_congruence=False, correct_only=False
+            masks, cond_names = action_kernel_and_previous_feedback(
+                eid, trial_mask, only_corr=False, smoothed=True
             )
         elif difficulty == 6:
             masks, cond_names = get_action_kernel_congruence(eid, trial_mask)
@@ -510,7 +443,7 @@ def compute_statistics(list_of_eids):
 
 def run_parallel(task_list, difficulty):
 
-    MAX_WORKERS = -1
+    MAX_WORKERS = 8
 
     print(f"Found {len(task_list)} sessions. Starting extraction with {MAX_WORKERS} cores...")
     t0 = time.time()
@@ -545,7 +478,7 @@ def run_parallel(task_list, difficulty):
 
     print(f"\nExtraction complete in {time.time() - t0:.2f} seconds.")
 
-    save_path = f"./data/generated/bwm_accumulated_data_correct_{difficulty}.pkl"
+    save_path = f"./data/generated/bwm_accumulated_data_correct_{difficulty}_actionkernel.pkl"
 
     print(f"\nSaving data to {save_path}...")
     with open(save_path, "wb") as f:
@@ -576,8 +509,11 @@ if __name__ == "__main__":
 
     # df_all.to_csv("./data/generated/reaction_time_stats.csv", index=False)
 
-    difficulty = 6
+    difficulty = 2
     run_parallel(task_list, difficulty)
 
-    difficulty = 7
+    difficulty = 3
+    run_parallel(task_list, difficulty)
+
+    difficulty = 4
     run_parallel(task_list, difficulty)

@@ -93,13 +93,15 @@ def simpler_rsa_matrices():
 
     # conditions:
     # L-cong, L-incong, R-cong, R-incong
+    # new condition order:
+    # dict_keys(["L_Cong_Corr", "R_Incong_Corr", "R_Cong_Corr", "L_Incong_Corr"])
 
     # choice
-    idx_choice_L = [0, 1]
+    idx_choice_L = [0, 3]
     idx_choice_R = [2, 3]
     # prior
-    idx_block_L = [0, 3]
-    idx_block_R = [1, 2]
+    idx_block_L = [0, 1]
+    idx_block_R = [2, 3]
     # congruence
     idx_congruent = [0, 2]
     idx_incongruent = [1, 3]
@@ -155,7 +157,7 @@ def run_rsa_regression(
 
             if normalization:
                 pop_matrix = zscore(pop_matrix, axis=1)
-                pop_norm = np.nan_to_num(pop_norm)
+                pop_matrix = np.nan_to_num(pop_matrix)
 
             n_bins = int(pop_matrix.shape[1] / conditions)
             reshaped = np.transpose(
@@ -377,6 +379,7 @@ def run_rsa_regression_with_reward(
     conditions=8,
     reward_dict=None,
     condition_keys=None,
+    switch=False,
 ):
 
     if model_vectors is None:
@@ -390,14 +393,17 @@ def run_rsa_regression_with_reward(
         global_rewards = np.zeros(conditions)
         all_animals = list(reward_dict.keys())
 
+        if switch:
+            k = "avg_number_of_correct_preceding_n"
+        else:
+            k = "avg_proportion_correct_preceding_n"
         for i, cond in enumerate(condition_keys):
             vals = [
-                reward_dict[anim][cond]["avg_number_of_correct_preceding_n"]
+                reward_dict[anim][cond][k]
                 for anim in all_animals
                 if anim in reward_dict and cond in reward_dict[anim]
             ]
             global_rewards[i] = np.nanmean(vals) if vals else 0
-
         global_reward_rdm = pdist(global_rewards.reshape(-1, 1), metric="euclidean")
     else:
         global_reward_rdm = np.zeros((conditions, conditions))
@@ -494,6 +500,7 @@ def run_rsa_regression_with_reward(
                 "r2": r2_scores,
                 "model_names": current_model_names,
                 "zscored_xregion": X_region,
+                "global_reward": global_reward_rdm,
             }
 
     return results

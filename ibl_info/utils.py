@@ -9,6 +9,7 @@ from brainbox.io.one import SessionLoader
 from brainwidemap import load_good_units
 import pandas as pd
 from tqdm import tqdm
+import pickle as pkl
 
 
 def equispaced_binning(values, n_bins=5, flexible_bounds=False):
@@ -343,5 +344,127 @@ def get_trial_masks_detailed(
 
             key = f"R_{cont_str}" + ("_Corr" if correct_only else "")
             masks[key] = is_stim_R & is_current_contrast & outcome_mask
+
+    return masks, list(masks.keys())
+
+
+def get_action_kernel_congruence(eid, trial_mask, only_corr=True):
+
+    with open("./data/processed/all_eids_dict.pkl", "rb") as f:
+        all_eids_dict = pkl.load(f)
+
+    trials_with_prior = all_eids_dict[eid]
+
+    # binarize prior, it track left probability.
+    trials = trials_with_prior[trial_mask]
+    expects_L = trials["prior"] > 0.5
+    expects_R = trials["prior"] < 0.5
+
+    # we get all 8 conditions
+    has_contrast_L = ~np.isnan(trials["contrastLeft"])
+    has_contrast_R = ~np.isnan(trials["contrastRight"])
+    is_correct = trials["feedbackType"] == 1
+    is_error = trials["feedbackType"] == -1
+
+    masks = {}
+
+    masks["L_Cong_Corr"] = has_contrast_L & expects_L & is_correct
+    masks["L_Cong_Err"] = has_contrast_L & expects_L & is_error
+    masks["R_Incong_Corr"] = has_contrast_R & expects_L & is_correct
+    masks["R_Incong_Err"] = has_contrast_R & expects_L & is_error
+
+    # Right Block Conditions
+    masks["R_Cong_Corr"] = has_contrast_R & expects_R & is_correct
+    masks["R_Cong_Err"] = has_contrast_R & expects_R & is_error
+    masks["L_Incong_Corr"] = has_contrast_L & expects_R & is_correct
+    masks["L_Incong_Err"] = has_contrast_L & expects_R & is_error
+
+    if only_corr:
+        masks = {k: v for k, v in masks.items() if "Corr" in k}
+
+    return masks, list(masks.keys())
+
+
+def get_trial_masks(trials, simple=False):
+    """
+    Returns boolean masks for 8 conditions (Correct & Error).
+    """
+    masks = {}
+
+    is_L_block = trials["probabilityLeft"] == 0.8
+    is_R_block = trials["probabilityLeft"] == 0.2
+
+    has_contrast_L = ~np.isnan(trials["contrastLeft"])
+    has_contrast_R = ~np.isnan(trials["contrastRight"])
+    is_correct = trials["feedbackType"] == 1
+    is_error = trials["feedbackType"] == -1
+
+    # Left Block Conditions
+    masks["L_Cong_Corr"] = has_contrast_L & is_L_block & is_correct
+    masks["L_Cong_Err"] = has_contrast_L & is_L_block & is_error
+    masks["R_Incong_Corr"] = has_contrast_R & is_L_block & is_correct
+    masks["R_Incong_Err"] = has_contrast_R & is_L_block & is_error
+
+    # Right Block Conditions
+    masks["R_Cong_Corr"] = has_contrast_R & is_R_block & is_correct
+    masks["R_Cong_Err"] = has_contrast_R & is_R_block & is_error
+    masks["L_Incong_Corr"] = has_contrast_L & is_R_block & is_correct
+    masks["L_Incong_Err"] = has_contrast_L & is_R_block & is_error
+
+    if simple:
+        # we return only correct trials
+        masks = {k: v for k, v in masks.items() if "Corr" in k}
+
+    return masks, list(masks.keys())
+
+
+def action_kernel_and_previous_feedback(eid, trial_mask, only_corr=True, smoothed=False):
+
+    with open("./data/processed/all_eids_dict.pkl", "rb") as f:
+        all_eids_dict = pkl.load(f)
+
+    trials_with_prior = all_eids_dict[eid]
+
+    # binarize prior, it track left probability.
+    trials = trials_with_prior[trial_mask]
+    expects_L = trials["prior"] > 0.5
+    expects_R = trials["prior"] < 0.5
+
+    has_contrast_L = ~np.isnan(trials["contrastLeft"])
+    has_contrast_R = ~np.isnan(trials["contrastRight"])
+
+    # shift to get previous trial info
+    prev_is_correct = (trials["feedbackType"] == 1).shift(1, fill_value=False)
+    prev_is_error = (trials["feedbackType"] == -1).shift(1, fill_value=False)
+
+    if smoothed:
+        is_rewarded = (trials["feedbackType"] == 1).astype(float)
+        prev_rewards = is_rewarded.shift(1)
+        moving_average_reward = prev_rewards.ewm(span=5, min_periods=1).mean()
+
+        # median_ema = moving_average_reward.median()
+        high_reward_state = moving_average_reward >= 0.5
+        low_reward_state = moving_average_reward < 0.5
+
+        # assign high_low to previous_correct/incorrect for shorter code
+        prev_is_correct = high_reward_state
+        prev_is_error = low_reward_state
+
+    masks = {}
+    masks["L_Cong_Corr"] = has_contrast_L & expects_L & prev_is_correct
+    masks["L_Cong_Err"] = has_contrast_L & expects_L & prev_is_error
+    masks["R_Incong_Corr"] = has_contrast_R & expects_L & prev_is_correct
+    masks["R_Incong_Err"] = has_contrast_R & expects_L & prev_is_error
+
+    # Right Block Conditions
+    masks["R_Cong_Corr"] = has_contrast_R & expects_R & prev_is_correct
+    masks["R_Cong_Err"] = has_contrast_R & expects_R & prev_is_error
+    masks["L_Incong_Corr"] = has_contrast_L & expects_R & prev_is_correct
+    masks["L_Incong_Err"] = has_contrast_L & expects_R & prev_is_error
+
+    if only_corr:
+        if smoothed:
+            raise Exception("This two shouldn't be used together")
+        masks = {k: v for k, v in masks.items() if "Corr" in k}
 
     return masks, list(masks.keys())
