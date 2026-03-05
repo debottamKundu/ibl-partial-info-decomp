@@ -1,3 +1,4 @@
+import ibl_info.gpfa_trajectories as gpfa
 import numpy as np
 from one.api import ONE
 from brainwidemap import load_good_units, load_trials_and_mask
@@ -28,23 +29,20 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 from ibl_info.selective_decomposition import filter_eids
-from ibl_info.utils import check_config
+import ibl_info.utils as utils
 
-config = check_config()
+config = utils.check_config()
 
 
-def run_time_varying_decoder(
+def run_gpfa_single_session(
     session_id,
     region,
     align_event="stimOn_times",
     t_pre=0.5,
     t_post=0.0,
-    bin_size=0.05,
-    stride=0.01,
+    bin_size=0.01,
 ):
-    """
-    Runs a time-resolved logistic regression decoder for a specific region.
-    """
+
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         password="international",
@@ -64,9 +62,9 @@ def run_time_varying_decoder(
     trials, mask = load_trials_and_mask(
         one, session_id, exclude_nochoice=True, exclude_unbiased=True
     )
-    trials = {k: v[mask] for k, v in trials.items()}
+    trials = trials[mask]
 
-    y = trials["feedbackType"]
+    labels = trials["feedbackType"]
 
     br = BrainRegions()
     acronyms = br.id2acronym(clusters["atlas_id"], mapping="Beryl")
@@ -85,7 +83,7 @@ def run_time_varying_decoder(
 
     align_times = trials[align_event].values - 0.1  #
 
-    binned, times = bin_spikes2D(
+    binned_elephant, times = gpfa.get_spiketrains_for_elephant(
         region_spike_times,
         region_spike_ids,
         target_ids,
@@ -95,53 +93,39 @@ def run_time_varying_decoder(
         bin_size,
     )
 
-    # w_points = int(bin_size / stride)
-    # kernel = np.ones(w_points) / w_points
-    # smoothed_binned = convolve1d(binned, kernel, axis=-1, mode="nearest")
-
-    # --- 4. Decoding Loop across Time (from outcome_decoder.py) ---
-    pipeline = Pipeline(
-        [
-            ("scaler", StandardScaler()),
-            (
-                "logreg",
-                LogisticRegression(class_weight="balanced", solver="liblinear", max_iter=1000),
-            ),
-        ]
+    mask_trials, conditions = utils.get_trial_masks(trials)  # all 8 conditions
+    mmd_matrix, conditions_nx, trajectories = gpfa.run_gpfa_and_mmd(
+        binned_elephant,
+        mask_trials,
+        latent_dim=3,
     )
 
-    cv_rule = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-    n_timebins = binned.shape[2]
-    time_scores = np.zeros(n_timebins)
+    accuracy = gpfa.decode_from_final_state(trajectories, labels)
 
-    print(f"Running decoder across {n_timebins} time bins for {region}...")
-    for t in range(n_timebins):
-
-        X_t = binned[:, :, t].T
-
-        # Cross-validate
-        scores = cross_val_score(
-            estimator=pipeline, X=X_t, y=y, cv=cv_rule, scoring="balanced_accuracy", n_jobs=-1
-        )
-        time_scores[t] = np.mean(scores)
-
-    return times, time_scores
+    return mmd_matrix, accuracy, trajectories, mask_trials
 
 
 def _worker_wrapper(args):
     """Unpacks arguments for the ProcessPoolExecutor."""
-    eid, region, align_event, t_pre, t_post, bin_size, stride = args
+    (
+        eid,
+        region,
+        align_event,
+        t_pre,
+        t_post,
+        bin_size,
+    ) = args
     try:
-        times, scores = run_time_varying_decoder(
-            eid, region, align_event, t_pre, t_post, bin_size, stride
+        mmd_matrix, accuracy, trajectories, mask_trials = run_gpfa_single_session(  # type: ignore
+            eid, region, align_event, t_pre, t_post, bin_size
         )
-        return region, eid, times, scores
+        return region, eid, mmd_matrix, accuracy, trajectories, mask_trials
     except Exception as e:
         print(f"Error in {eid} for {region}: {e}")
-        return region, eid, None, None
+        return region, eid, None, None, None, None
 
 
-def run_parallel_time_varying(list_of_regions, align_event="stimOn_times", t_pre=0.5, t_post=0.0):
+def run_parallel_gpfa(list_of_regions, align_event="stimOn_times", t_pre=0.5, t_post=0.0):
     one = ONE(
         base_url="https://openalyx.internationalbrainlab.org",
         password="international",
@@ -157,12 +141,10 @@ def run_parallel_time_varying(list_of_regions, align_event="stimOn_times", t_pre
         selective_eids = filter_eids(unit_df, region, significant_filter=config["decoder_filter"])
         for eid in selective_eids:
             # Append arguments needed for the worker
-            all_tasks_to_run.append((eid, region, align_event, t_pre, t_post, 0.05, 0.01))
+            all_tasks_to_run.append((eid, region, align_event, t_pre, t_post, 0.01))
 
     print(f"Total tasks (Region-Session pairs): {len(all_tasks_to_run)}")
-
-    # Execute in parallel
-    workers = max(1, os.cpu_count() // 4)
+    workers = max(1, os.cpu_count() // 2)  # type: ignore
     processed_results = []
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
@@ -178,15 +160,19 @@ def run_parallel_time_varying(list_of_regions, align_event="stimOn_times", t_pre
     print("Aggregating and saving results...")
     region_data = {region: {} for region in list_of_regions}
 
-    for region, eid, times, scores in processed_results:
-        if scores is not None and times is not None:
-            region_data[region][eid] = {"times": times, "scores": scores}
-
+    for region, eid, mmd_matrix, accuracy, trajectories, mask_trials in processed_results:
+        if mmd_matrix is not None:
+            region_data[region][eid] = {
+                "mmd_matrix": mmd_matrix,
+                "accuracy": accuracy,
+                "trajectories": trajectories,
+                "mask_trials": mask_trials,
+            }
     # Save one pickle per region
     os.makedirs("./data/generated", exist_ok=True)
     for region, data_dict in region_data.items():
-        if data_dict:  # Only save if we have successful runs for this region
-            save_path = f"./data/generated/time_varying_{region}_{align_event}.pkl"
+        if data_dict:
+            save_path = f"./data/generated/gpfa_{region}_{align_event}.pkl"
             with open(save_path, "wb") as f:
                 pkl.dump(data_dict, f)
             print(f"Saved {len(data_dict)} sessions to {save_path}")
@@ -224,4 +210,4 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    run_parallel_time_varying(important_regions, align_event="stimOn_times", t_pre=0.5, t_post=0.0)
+    run_parallel_gpfa(important_regions, align_event="stimOn_times", t_pre=0.5, t_post=0.0)
