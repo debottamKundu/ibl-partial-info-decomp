@@ -40,7 +40,11 @@ def region_combinations(n_regions):
     return combinations_regions
 
 
-def check_minimum(data_epoch, actual_regions):
+def check_minimum(data_epoch, actual_regions, config=None):
+
+    if config is None:
+        config = check_config()
+
     regions_to_keep = np.zeros(len(actual_regions))
     for idx in range(len(actual_regions)):
         # print(idx)
@@ -58,12 +62,12 @@ def check_minimum(data_epoch, actual_regions):
         if flag == False:
             continue
 
-        # cheap fix
+        region_data = data_epoch[idx]
         if region_data.ndim == 2:
             region_data = np.expand_dims(region_data, axis=1)
 
         # i transpose this into frames x neurons x trials
-        region_data = data_epoch[idx].transpose(1, 2, 0)
+        region_data = region_data.transpose(1, 2, 0)
         new_region_data = np.zeros_like(region_data)
         for frame in range(new_region_data.shape[0]):
             new_region_data[frame, :] = region_data[frame, :]

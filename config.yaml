@@ -1,5 +1,5 @@
 # wifi-decoding only
-wifi_subset: 15
+wifi_subset: 10
 high_contrast: False
 hyperparamopt: True
 null_computation: False
