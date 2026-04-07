@@ -29,7 +29,7 @@ def ideal_rsa_matrices():
         "Choice": np.zeros((n_conds, n_conds)),
         "Prior": np.zeros((n_conds, n_conds)),
         "Congruence": np.zeros((n_conds, n_conds)),
-        # "Outcome": np.zeros((n_conds, n_conds)),
+        "Outcome": np.zeros((n_conds, n_conds)),
         "Stimulus": np.zeros((n_conds, n_conds)),
     }
 
@@ -59,8 +59,8 @@ def ideal_rsa_matrices():
                 models["Prior"][r, c] = 1
 
             # Outcome Model
-            # if (r in idx_corr) != (c in idx_corr):
-            #     models["Outcome"][r, c] = 1
+            if (r in idx_corr) != (c in idx_corr):
+                models["Outcome"][r, c] = 1
 
             # Stimulus Model
             if (r in idx_stim_L) != (c in idx_stim_L):
@@ -281,6 +281,15 @@ def plot_rsa_dynamics(results, region, model_names, bin_size_s=0.01):
     plt.show()
 
 
+KERNEL_COLORS = {
+    "Choice": "#d95f02",  # Orange
+    "Prior": "#1b9e77",  # Green
+    "Congruence": "#7570b3",  # Purple
+    "Outcome": "#e7298a",  # Pink
+    "Stimulus": "#66a61e",  # Olive
+}
+
+
 def plot_rsa_summary_bars(results, model_names):
     """
     Plots the mean Beta weights for each kernel, separated by Epoch.
@@ -292,7 +301,6 @@ def plot_rsa_summary_bars(results, model_names):
     """
 
     epochs_ordered = ["Quiescent", "Stimulus", "Choice"]
-
     records = []
 
     for region, region_data in results.items():
@@ -303,7 +311,6 @@ def plot_rsa_summary_bars(results, model_names):
             betas_over_time = region_data[epoch]["betas"]
 
             for i, name in enumerate(model_names):
-
                 kernel_betas = betas_over_time[:, i]
                 for val in kernel_betas:
                     records.append({"Region": region, "Epoch": epoch, "Kernel": name, "Beta": val})
@@ -317,11 +324,8 @@ def plot_rsa_summary_bars(results, model_names):
     fig, axes = plt.subplots(3, 1, figsize=(8, 18))
     fig.suptitle("RSA Model Weights by Region and Epoch", fontsize=16, y=1.05)
 
-    palette = sns.color_palette("bright", n_colors=len(model_names))
-
     for i, epoch in enumerate(epochs_ordered):
         ax = axes[i]
-
         epoch_data = df[df["Epoch"] == epoch]
 
         if epoch_data.empty:
@@ -335,16 +339,15 @@ def plot_rsa_summary_bars(results, model_names):
             y="Beta",
             hue="Kernel",
             ax=ax,
-            palette=palette,
+            palette=KERNEL_COLORS,  # 2. Pass the dictionary directly here!
             edgecolor="black",
-            errorbar="se",  # Calculates SEM
-            capsize=0.1,  # Adds little caps to the error bars
+            errorbar="se",
+            capsize=0.1,
         )
 
         ax.set_title(epoch, fontsize=14, fontweight="bold")
         ax.set_xlabel("")
         ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-
         ax.tick_params(axis="x", rotation=90)
 
         if i == 0:
@@ -352,11 +355,9 @@ def plot_rsa_summary_bars(results, model_names):
         else:
             ax.set_ylabel("")
 
-        # if i == 2:
+        # Put legend outside the plot
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", title="Kernel", frameon=False)
-        # else:
-        #     if ax.get_legend() is not None:
-        #         ax.get_legend().remove()
+
     sns.despine()
     plt.tight_layout()
     plt.show()
@@ -504,3 +505,68 @@ def run_rsa_regression_with_reward(
             }
 
     return results
+
+
+def dynamic_rsa_matrices(conditions):
+    """
+    Constructs Model RDMs dynamically based on condition attributes.
+
+    Parameters:
+    conditions (list of dicts): A list where each dictionary contains the
+                                features of a condition in the current order.
+
+    Returns:
+    tuple: (predictors dict, list of model names, full models dict)
+    """
+    # example
+    # current_condition_order =
+    # {"Name": "L_Cong_Corr",   "Stim": "L", "Block": "L", "Move": "L", "Cong": "Cong",   "Out": "Corr"},
+    # {"Name": "L_Cong_Err",    "Stim": "L", "Block": "L", "Move": "R", "Cong": "Cong",   "Out": "Err"},
+    # {"Name": "L_Incong_Corr", "Stim": "L", "Block": "R", "Move": "L", "Cong": "Incong", "Out": "Corr"},
+    # {"Name": "L_Incong_Err",  "Stim": "L", "Block": "R", "Move": "R", "Cong": "Incong", "Out": "Err"},
+    # {"Name": "R_Cong_Corr",   "Stim": "R", "Block": "R", "Move": "R", "Cong": "Cong",   "Out": "Corr"},
+    # {"Name": "R_Cong_Err",    "Stim": "R", "Block": "R", "Move": "L", "Cong": "Cong",   "Out": "Err"},
+    # {"Name": "R_Incong_Corr", "Stim": "R", "Block": "L", "Move": "R", "Cong": "Incong", "Out": "Corr"},
+    # {"Name": "R_Incong_Err",  "Stim": "R", "Block": "L", "Move": "L", "Cong": "Incong", "Out": "Err"}
+    n_conds = len(conditions)
+
+    # Initialize empty matrices
+    models = {
+        "Choice": np.zeros((n_conds, n_conds)),
+        "Prior": np.zeros((n_conds, n_conds)),
+        "Congruence": np.zeros((n_conds, n_conds)),
+        "Outcome": np.zeros((n_conds, n_conds)),
+        "Stimulus": np.zeros((n_conds, n_conds)),
+    }
+
+    for r in range(n_conds):
+        for c in range(n_conds):
+
+            # Choice Model (1 if different movement, 0 if same)
+            if conditions[r]["Move"] != conditions[c]["Move"]:
+                models["Choice"][r, c] = 1
+
+            # Prior Model (1 if different block, 0 if same)
+            if conditions[r]["Block"] != conditions[c]["Block"]:
+                models["Prior"][r, c] = 1
+
+            # Stimulus Model
+            if conditions[r]["Stim"] != conditions[c]["Stim"]:
+                models["Stimulus"][r, c] = 1
+
+            # Congruence Model
+            if conditions[r]["Cong"] != conditions[c]["Cong"]:
+                models["Congruence"][r, c] = 1
+
+            # Outcome Model
+            if conditions[r]["Out"] != conditions[c]["Out"]:
+                models["Outcome"][r, c] = 1
+
+    # Flatten upper triangles for regression predictors
+    triu_indices = np.triu_indices(n_conds, k=1)
+
+    predictors = {}
+    for name, matrix in models.items():
+        predictors[name] = matrix[triu_indices]
+
+    return predictors, list(models.keys()), models

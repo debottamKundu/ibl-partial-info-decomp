@@ -58,6 +58,10 @@ def check_minimum(data_epoch, actual_regions):
         if flag == False:
             continue
 
+        # cheap fix
+        if region_data.ndim == 2:
+            region_data = np.expand_dims(region_data, axis=1)
+
         # i transpose this into frames x neurons x trials
         region_data = data_epoch[idx].transpose(1, 2, 0)
         new_region_data = np.zeros_like(region_data)

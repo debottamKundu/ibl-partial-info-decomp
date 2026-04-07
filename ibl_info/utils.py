@@ -420,7 +420,7 @@ def get_trial_masks(trials, simple=False):
 
 def action_kernel_and_previous_feedback(eid, trial_mask, only_corr=True, smoothed=False):
 
-    with open("./data/processed/all_eids_dict.pkl", "rb") as f:
+    with open("../data/processed/all_eids_dict.pkl", "rb") as f:
         all_eids_dict = pkl.load(f)
 
     trials_with_prior = all_eids_dict[eid]

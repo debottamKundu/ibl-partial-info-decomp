@@ -117,7 +117,7 @@ def run_time_varying_decoder(
     print(f"Running decoder across {n_timebins} time bins for {region}...")
     for t in range(n_timebins):
 
-        X_t = binned[:, :, t].T
+        X_t = binned[:, :, t]
 
         # Cross-validate
         scores = cross_val_score(
