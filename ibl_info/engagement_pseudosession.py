@@ -100,7 +100,12 @@ if __name__ == "__main__":
     wifi_sessions = one.search(datasets="widefieldU.images.npy")
     print(f"{len(wifi_sessions)} sessions with widefield data found")  # type: ignore
 
-    global_eid_list = np.append(global_eid_list, wifi_sessions)  # type: ignore
+    temp_array = []
+    for eid in wifi_sessions:  # type: ignore
+        temp_array.append(str(eid))
+    wifi_sessions = np.asarray(temp_array)
+
+    global_eid_list = np.concatenate([global_eid_list, wifi_sessions])  # type: ignore
     global_eid_list = np.unique(global_eid_list)
 
     # create global subject list
