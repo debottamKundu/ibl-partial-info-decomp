@@ -12,7 +12,11 @@ def process_eid(eid):
     This function contains the core logic for each eid.
     It will be executed by a worker process.
     """
-    one = ONE(base_url="https://openalyx.internationalbrainlab.org", password="international")
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        username="intbrainlab",
+    )
     try:
         pids, probes = one.eid2pid(eid)
         for pid in pids:
@@ -53,7 +57,11 @@ if __name__ == "__main__":
         "IP",
     ]
 
-    one = ONE(base_url="https://openalyx.internationalbrainlab.org", password="international")
+    one = ONE(
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
+        username="intbrainlab",
+    )
 
     bwm_df = bwm_query(one)
     unit_df = bwm_units(one)
@@ -63,6 +71,8 @@ if __name__ == "__main__":
 
     # find the differences
     leftovereids = list((set(bwm_df["eid"].unique())).difference(set(eids)))
+
+    print(len(leftovereids))
 
     num_processes = mp.cpu_count() // 2
 
