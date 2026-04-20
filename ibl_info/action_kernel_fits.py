@@ -11,14 +11,13 @@ config = check_config()
 
 
 def process_session(eid, one):
-    """Function containing the logic for a single session."""
+
     try:
-        # Load data
+
         one.load_object(eid, "trials")
         sl = bbone.SessionLoader(one=one, eid=eid)
         sl.load_trials()
 
-        # Instantiate model
         my_model = models.ActionKernel(
             path_to_results="results_behavioral",
             session_uuids=eid,
@@ -26,10 +25,8 @@ def process_session(eid, one):
             single_zeta=False,
         )
 
-        # Train
         my_model.load_or_train(remove_old=False, adaptive=True)
 
-        # Predict and join
         df_prior = my_model.predict_trials()
         df_trials = sl.trials.join(df_prior, how="left")
         return (eid, df_trials)
@@ -75,24 +72,6 @@ if __name__ == "__main__":
         password="international",
     )
     global_eid_list = get_requisite_eids(one, important_regions)
-
-    # one.load_object(eid, "trials")
-    # sl = bbone.SessionLoader(one=one, eid=eid)
-    # sl.load_trials()
-    # # instantiate model
-    # my_model = models.ActionKernel(
-    #     path_to_results="results_behavioral",
-    #     session_uuids=eid,
-    #     df_trials=sl.trials,
-    #     single_zeta=False,
-    # )
-
-    # # train - this will save data in the current directory
-    # my_model.load_or_train(remove_old=False, adaptive=True)
-
-    # # predict trials and eventually join in the original dataframe
-    # df_prior = my_model.predict_trials()
-    # df_trials = sl.trials.join(df_prior, how="left")
 
     results_list = Parallel(n_jobs=-1)(
         delayed(process_session)(eid, one) for eid in global_eid_list
