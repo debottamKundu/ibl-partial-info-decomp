@@ -30,7 +30,7 @@ def pseudosession_per_eid(session_id, subject_name, n_permutations=100):
         password="international",
         silent=True,
         username="intbrainlab",
-        #mode="local",
+        # mode="local",
     )
     print(session_id)
     print(subject_name)
@@ -78,7 +78,7 @@ def prepare_and_run(args):
     savepath = f"./data/generated/engagement_pseudosessions/{session_id}.pqt"
     if os.path.exists(savepath):
         return savepath
-    
+
     try:
         data = pseudosession_per_eid(session_id, subject_name)
         df = pd.DataFrame(data)
@@ -87,6 +87,7 @@ def prepare_and_run(args):
     except Exception as e:
         print(e)
         return None
+
 
 if __name__ == "__main__":
 
@@ -110,8 +111,10 @@ if __name__ == "__main__":
     global_eid_list = np.concatenate([global_eid_list, wifi_sessions])  # type: ignore
     global_eid_list = np.unique(global_eid_list)
 
+    bwm_df = bwm_query(one)
+    leftover_eids = list(set(bwm_df["eid"].unique()).difference(set(global_eid_list)))
     # create global subject list
-    workers = 8#(os.cpu_count()) // 2  # type: ignore
+    workers = 8  # (os.cpu_count()) // 2  # type: ignore
 
     # now we need to generate pseudosessions and fit
     subject_list = []
@@ -120,7 +123,9 @@ if __name__ == "__main__":
         subject = details["subject"]  # type: ignore
         subject_list.append(subject)
 
-    all_tasks_to_run = list(zip(global_eid_list, subject_list))
+    all_tasks_to_run = list(
+        zip(leftover_eids, subject_list)
+    )  # NOTE: check eid list provided here before running
 
     # run a single one
     # prepare_and_run(all_tasks_to_run[0])
@@ -136,5 +141,4 @@ if __name__ == "__main__":
                 res = f.result()
                 if res:
                     saved_paths.append(res)
-
     print("Fin.")
