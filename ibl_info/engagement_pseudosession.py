@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # now we need to generate pseudosessions and fit
     subject_list = []
-    for eid in global_eid_list:
+    for eid in leftover_eids:  # NOTE: check before running
         details = one.get_details(eid)
         subject = details["subject"]  # type: ignore
         subject_list.append(subject)
