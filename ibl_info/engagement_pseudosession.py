@@ -26,13 +26,14 @@ config = check_config()
 def pseudosession_per_eid(session_id, subject_name, n_permutations=100):
 
     one = ONE(
-        # base_url="https://openalyx.internationalbrainlab.org",
-        # password="international",
+        base_url="https://openalyx.internationalbrainlab.org",
+        password="international",
         silent=True,
-        # username="intbrainlab",
-        mode="local",
+        username="intbrainlab",
+        #mode="local",
     )
-
+    print(session_id)
+    print(subject_name)
     trials, mask = load_trials_and_mask(
         one,
         session_id,
@@ -58,7 +59,7 @@ def pseudosession_per_eid(session_id, subject_name, n_permutations=100):
             [trials.choice.values],
             [pseudosess.stim_side.values],
         )
-        act_sim, stim, side = model.simulate(  # type: ignore
+        act_sim, stim, side = my_model.simulate(  # type: ignore
             arr_params, stim[0, :], side[0, :], nb_simul=1, only_perf=False, return_prior=False
         )
         act_sim = np.array(act_sim.squeeze().T, dtype=np.int64)
@@ -77,14 +78,15 @@ def prepare_and_run(args):
     savepath = f"./data/generated/engagement_pseudosessions/{session_id}.pqt"
     if os.path.exists(savepath):
         return savepath
-
-    data = pseudosession_per_eid(session_id, subject_name)
-    if data:
+    
+    try:
+        data = pseudosession_per_eid(session_id, subject_name)
         df = pd.DataFrame(data)
         df.to_parquet(savepath)
         return savepath
-    return None
-
+    except Exception as e:
+        print(e)
+        return None
 
 if __name__ == "__main__":
 
@@ -109,7 +111,7 @@ if __name__ == "__main__":
     global_eid_list = np.unique(global_eid_list)
 
     # create global subject list
-    workers = (os.cpu_count()) // 2  # type: ignore
+    workers = 8#(os.cpu_count()) // 2  # type: ignore
 
     # now we need to generate pseudosessions and fit
     subject_list = []
@@ -121,9 +123,9 @@ if __name__ == "__main__":
     all_tasks_to_run = list(zip(global_eid_list, subject_list))
 
     # run a single one
-    prepare_and_run(all_tasks_to_run[0])
+    # prepare_and_run(all_tasks_to_run[0])
 
-    run_all_flag = False
+    run_all_flag = True
     if run_all_flag:
         with ProcessPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(prepare_and_run, t) for t in all_tasks_to_run]
