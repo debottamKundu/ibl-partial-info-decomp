@@ -26,26 +26,27 @@ config = check_config()
 def pseudosession_per_eid(session_id, subject_name, n_permutations=100):
 
     one = ONE(
-        base_url="https://openalyx.internationalbrainlab.org",
-        password="international",
-        silent=True,
-        username="intbrainlab",
-        # mode="local",
+        # base_url="https://openalyx.internationalbrainlab.org",
+        # password="international",
+        # silent=True,
+        # username="intbrainlab",
+        mode="local",
     )
     print(session_id)
     print(subject_name)
     trials, mask = load_trials_and_mask(
         one,
         session_id,
-        exclude_nochoice=False,
+        exclude_nochoice=True,  # True
         exclude_unbiased=False,  # should include no-choice trials
+        min_rt=0.02,
     )
 
     my_model = models.ActionKernel(
-        path_to_results="results_behavioral",
+        path_to_results="results_behavioral_zeta",
         session_uuids=session_id,
         df_trials=trials,
-        single_zeta=False,
+        single_zeta=True,  # should be True?
     )
 
     my_model.load_or_train(remove_old=False, adaptive=True)
@@ -97,34 +98,36 @@ if __name__ == "__main__":
         username="intbrainlab",
         password="international",
     )
-    global_eid_list = get_requisite_eids(one, important_regions)
+    # global_eid_list = get_requisite_eids(one, important_regions)
 
     # get wifi sessions
-    wifi_sessions = one.search(datasets="widefieldU.images.npy")
-    print(f"{len(wifi_sessions)} sessions with widefield data found")  # type: ignore
+    # wifi_sessions = one.search(datasets="widefieldU.images.npy")
+    # print(f"{len(wifi_sessions)} sessions with widefield data found")  # type: ignore
 
-    temp_array = []
-    for eid in wifi_sessions:  # type: ignore
-        temp_array.append(str(eid))
-    wifi_sessions = np.asarray(temp_array)
+    # temp_array = []
+    # for eid in wifi_sessions:  # type: ignore
+    #     temp_array.append(str(eid))
+    # wifi_sessions = np.asarray(temp_array)
 
-    global_eid_list = np.concatenate([global_eid_list, wifi_sessions])  # type: ignore
-    global_eid_list = np.unique(global_eid_list)
+    # global_eid_list = np.concatenate([global_eid_list, wifi_sessions])  # type: ignore
+    # global_eid_list = np.unique(global_eid_list)
 
     bwm_df = bwm_query(one)
-    leftover_eids = list(set(bwm_df["eid"].unique()).difference(set(global_eid_list)))
+    global_eid_list = bwm_df["eid"].unique()
+
+    # leftover_eids = list(set(bwm_df["eid"].unique()).difference(set(global_eid_list)))
     # create global subject list
-    workers = 8  # (os.cpu_count()) // 2  # type: ignore
+    workers = 32  # (os.cpu_count()) // 2  # type: ignore
 
     # now we need to generate pseudosessions and fit
     subject_list = []
-    for eid in leftover_eids:  # NOTE: check before running
+    for eid in global_eid_list:  # NOTE: check before running
         details = one.get_details(eid)
         subject = details["subject"]  # type: ignore
         subject_list.append(subject)
 
     all_tasks_to_run = list(
-        zip(leftover_eids, subject_list)
+        zip(global_eid_list, subject_list)
     )  # NOTE: check eid list provided here before running
 
     # run a single one
