@@ -7,6 +7,7 @@ from ibl_info.pseudosession import get_requisite_eids
 from ibl_info.utils import check_config
 import pickle as pkl
 from brainwidemap import bwm_query, load_good_units, load_trials_and_mask, bwm_units
+from brainbox.io.one import SessionLoader
 
 config = check_config()
 
@@ -19,13 +20,17 @@ def process_session(session_id):
             mode="local",
         )
         print(session_id)
-        trials, mask = load_trials_and_mask(
-            one,
-            session_id,
-            exclude_nochoice=True,  # True
-            exclude_unbiased=False,  # should include no-choice trials
-            min_rt=0.02,
-        )
+        # use sessionloader for trials.
+        sl = SessionLoader(one=one, eid=session_id)
+        sl.load_trials()
+        # trials, mask = load_trials_and_mask(
+        #     one,
+        #     session_id,
+        #     exclude_nochoice=True,  # True
+        #     exclude_unbiased=False,  # should include no-choice trials
+        #     min_rt=0.02,
+        # )
+        trials = sl.trials
 
         my_model = models.ActionKernel(
             path_to_results="results_behavioral_zeta",
@@ -53,17 +58,23 @@ if __name__ == "__main__":
         password="international",
     )
     # global_eid_list = get_requisite_eids(one, important_regions)
+    # bwm_df = bwm_query(one)
+    # global_eid_list = bwm_df["eid"].unique()
 
-    bwm_df = bwm_query(one)
-    global_eid_list = bwm_df["eid"].unique()
+    # get WiFi sessions
+    sessions = one.search(datasets="widefieldU.images.npy")
 
     workers = 32
 
-    results_list = Parallel(n_jobs=-1)(
-        delayed(process_session)(eid, one) for eid in global_eid_list
-    )
+    process_session(sessions[0])  # type: ignore
 
-    big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
+    multiprocess = False
+    if multiprocess:
+        results_list = Parallel(n_jobs=workers)(
+            delayed(process_session)(eid, one) for eid in sessions  # type: ignore
+        )
 
-    with open("./data/processed/all_eids_dict_single_zeta_complete_bwm.pkl", "wb") as f:
-        pkl.dump(big_dict, f)
+        big_dict = {eid: df for eid, df in results_list if df is not None}  # type: ignore
+
+        with open("./data/processed/all_eids_dict_single_zeta_complete_wifi.pkl", "wb") as f:
+            pkl.dump(big_dict, f)
