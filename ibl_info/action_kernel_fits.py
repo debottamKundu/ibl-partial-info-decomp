@@ -34,7 +34,7 @@ def process_session(session_id):
 
         my_model = models.ActionKernel(
             path_to_results="results_behavioral_zeta",
-            session_uuids=session_id,
+            session_uuids=str(session_id),
             df_trials=trials,
             single_zeta=True,  # should be True?
         )
